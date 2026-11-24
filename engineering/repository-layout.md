@@ -601,7 +601,7 @@ specifications/
 │   ├── goal-contracts.md
 │   ├── information-flow.md
 │   └── security-invariants.md
-├── specifications/
+├── standards/
 │   ├── syscall-abi.md
 │   ├── agent-definition.md
 │   ├── goal-contract.md
