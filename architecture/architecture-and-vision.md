@@ -1,11 +1,12 @@
 # Clavenar OS — Architecture and Vision
 ## Infrastructure for autonomous intelligence
 
-**Architecture and vision — revised draft 0.9 — 24 November 2026**  
+**Architecture and vision — draft 0.10 — 25 November 2026**
+
 **Project name:** Clavenar OS  
 **Umbrella brand:** Clavenar — clavenar.io  
 **Platforms:** RV64 reference; AMD64 prioritized for hardware-accelerated Goal Machines; ARM64 later; Linux-hosted runtime and virtual deployment planned  
-**Status:** Proposed architecture building on an educational Rust/RV64 kernel. The earlier kernel, RAM filesystem and shell are source-level prototypes, not verified production implementations. The agent-native mechanisms described here are design goals, not existing capabilities.
+**Implementation status.** Kernel 0.0.1 boots on QEMU RV64 with Sv39, a shell, RamFS and two launchable child programs. Section 21 records the source revision, limits and a reproducible check. Goal objects, agent budgets, transactions, model services and Goal Machines are proposed milestones.
 
 > Intelligence is untrusted. Authority is explicit. Autonomy is bounded. State is reversible where possible. Execution is accountable.
 
@@ -17,7 +18,7 @@ A conventional OS manages processes, memory, files, devices and CPU time. Claven
 
 The central research question is whether a clean-slate operating system can provide these guarantees more consistently, with a smaller auditable security boundary and less integration complexity, than an equivalently hardened Linux-hosted agent runtime.
 
-The initial target is QEMU's RV64 `virt` machine with OpenSBI. The native kernel will be designed for architecture portability. Begin the AMD64 port during v0.3, and target a working KVM-accelerated guest at v0.5; ARM64 follows when justified. The native kernel and bootable OS are the primary engineering deliverables from the outset. A Linux-hosted implementation of the same agent API is a separate, complementary adoption, experimentation and commercialization track; it is not a prerequisite for releasing the native OS. Clavenar Virtual runs that same native kernel as a VM guest, initially using QEMU and then hardware-accelerated KVM on compatible hosts. Disposable, goal-scoped VMs (Goal Machines) are the proposed initial commercial native deployment. A dedicated Rust VMM using KVM directly is an optional later optimization, not a prerequisite. Real hardware, embedded autonomous devices, robotics and hardware/software co-design are later targets.
+The reference target is QEMU's RV64 `virt` machine with OpenSBI. The native kernel and its userland are the primary engineering deliverables. Clavenar Hosted would provide the same logical agent API on Linux and can develop independently. Clavenar Virtual runs the native kernel as a guest. Development uses QEMU/TCG on non-RISC-V hosts. The roadmap starts the AMD64 port during native v0.3 and targets QEMU/KVM on compatible AMD64 hosts at Virtual V0.5. Disposable VMs scoped to a goal (Goal Machines) are the first commercial native deployment proposed. ARM64, physical devices, robotics, hardware co-design and a dedicated Rust VMM remain later options.
 
 Clavenar is not an agent-only OS. Conventional tools, services and native applications are essential; agents use these deterministic components to perform work efficiently. Three complementary execution models define the platform: imperative programs, goal-driven agents, and verified reactive policies (Agentic Reflex Architecture). MCP is a core user-space interoperability standard, not a privileged protocol or security boundary. Agent definitions combine detailed instructions, skills, workflows, requested capabilities, budgets and lifecycle settings.
 
@@ -37,7 +38,7 @@ Clavenar is not an agent-only OS. Conventional tools, services and native applic
 
 **How to read this document.** Sections 2–17 define the common architecture and core mechanisms; Sections 18–20 and 25–27 cover differentiation, evidence, threats and positioning. Sections 21–24 define the starting point, repository and authoritative delivery roadmap. Sections 28–36 specify reflexes, userland, MCP, deployment, inference, agent definitions and commercialization. Section 23 is the master release plan; later subsystem roadmaps depend on it. Appendix A defines frequently used terms. Document revision numbers are independent of software release numbers.
 
-**Revision 0.9:** Replaced the Section 16 approval and prompt-injection containment ASCII sketch with a graphical policy-validation flow diagram; retained the v0.8 layout, style and prior revisions. All design examples remain proposals, not validated implementation results.
+**Draft 0.10** records the running RV64 baseline and aligns goal contracts, approval, publication and reflex release criteria across the design.
 
 ## 2. Design philosophy
 
@@ -45,7 +46,7 @@ Clavenar is not an agent-only OS. Conventional tools, services and native applic
 - **Every agent has a purpose.** Goals bind work to a structured policy, a budget, a deadline and a supervision tree.
 - **Every action requires authority.** Capabilities grant specific rights, with no ambient access to unrelated resources.
 - **Autonomy is bounded.** CPU, memory, storage, inference, spending and delegated work are limited by enforceable quotas.
-- **Consequential operations are accountable.** Mediated operations carry authenticated agent and goal identifiers and produce auditable outcomes.
+- **Consequential operations are accountable.** Record the authenticated caller. Goal-owned work carries the goal identity and, when an agent acts, its identity as well.
 - **Changes are reversible where practical.** Filesystem operations can be staged, inspected, committed or discarded. Irreversible external actions need separate authorization.
 - **The kernel is deterministic in its enforcement.** Reasoning, model inference and interpretation of human goals occur in user space; the kernel enforces machine-readable policies. This does not imply that every execution schedule is deterministic.
 - **Rust first.** Minimize and audit unsafe code, use typed handles, and favor explicit ownership and lifetime management.
@@ -73,11 +74,19 @@ An agent is not necessarily a single process. An agent identity may be associate
 
 ## 4. System architecture
 
-![Clavenar system architecture. User space contains the human interface, applications and isolated autonomous agents, the agent runtime, trusted services, and the system-call and typed-IPC boundary. Below the trust boundary, kernel space contains the Clavenar kernel, followed by platform firmware and the reference and target platforms.](clavenar_system_architecture_diagram.png){ width=100% }
+```mermaid
+flowchart TD
+    Operator["Operator"] --> Services["Trusted user services: goals, approvals, storage and brokers"]
+    Agents["Agents and tools in user mode"] -->|typed requests| Services
+    Model["Model or external tool"] -->|untrusted results| Services
+    Agents -->|syscalls| Kernel["Native kernel: address spaces, handles, scheduling and IPC"]
+    Services -->|syscalls and IPC| Kernel
+    Kernel --> Platform["Firmware and platform hardware or virtual devices"]
+```
 
-**Figure 4.** High-level layered view of the Clavenar architecture across user space, the trust boundary and kernel space.
+**Figure 4.** Proposed Native architecture. User-mode brokers hold service credentials and enforce goal policy. The kernel checks access to the objects it controls.
 
-A capability-oriented microkernel or small hybrid kernel is a promising long-term architecture. The present prototype is a simple monolithic kernel; services can be moved into separate address spaces incrementally once isolation and IPC exist. A restarted service must not retain unauthorized handles or silently lose committed state.
+The prototype keeps scheduling, syscall dispatch and RamFS in one supervisor kernel. User tasks already have separate address spaces and bounded parent/child messages. Moving a filesystem or policy service into its own process will also require service endpoints, explicit delegation and recovery of committed state with current authority.
 
 ### 4.1 Trusted versus untrusted components
 
@@ -107,7 +116,7 @@ pub type ProcessId = u64;
 pub enum Resource {
     File(ObjectId),
     Directory(ObjectId),
-    Process(ObjectId),
+    Process(ProcessId),
     Agent(AgentId),
     Goal(GoalId),
     Channel(ObjectId),
@@ -137,7 +146,7 @@ pub struct Capability {
 }
 ```
 
-This is an illustrative representation, not a complete capability implementation. Actual object reference counts, handle lifetimes, derivation lineage, revocation and concurrency must be specified.
+These fields describe a protected table entry. A caller presents an opaque handle and the handler resolves it in that caller's table. Copying an object ID or a serialized rights mask conveys no authority. The capability specification must also define object lifetimes, derivation lineage and the ordering of revocation against use.
 
 ### 5.1 Capability rules
 
@@ -150,7 +159,7 @@ This is an illustrative representation, not a complete capability implementation
 - Object lifetime: handles cannot silently refer to recycled objects after deletion or restart.
 - No ambient bypass: raw device access, arbitrary memory mapping, unrestricted networking, generic proxy tools and privileged IPC must not circumvent restrictions.
 
-The existing RamFS descriptor table is a useful starting point, but it is global and not a complete security boundary. Per-process tables and Sv39 protection are prerequisites for enforcing capabilities against untrusted code.
+The prototype already checks each RamFS handle against the calling task's table. A scoped launch grants a read-only directory handle and starts the child without a working directory. Ordinary launches still receive access to the root namespace. General rights derivation, recursive revocation and goal-bound expiry are future mechanisms (Section 21).
 
 ### 5.2 Intent-based security
 
@@ -163,12 +172,16 @@ struct GoalPolicy {
     resources: CapabilitySet,
     allowed_actions: ActionSet,
     deadline_ticks: u64,
-    max_cost_microunits: u64,
+    max_cost_usd_micros: u64,
     requires_approval: ActionSet,
 }
 ```
 
 For a goal such as “summarize the documents in /home/reports”, grant read access to that directory and no write/delete authority. Do not treat the natural-language sentence as an enforceable permission specification. A trusted service and/or human must translate the goal into explicit constraints.
+
+The proposed **Goal Contract Enforcement Architecture (GCEA)** defines how that translation is checked. A planner proposes a contract. A trusted authorizer binds its version, resource scope, permitted effects and limits to the caller's delegable rights. At dispatch the resource handler checks the live grant, remaining budget and applicable preconditions. A backend must reject a contract if it cannot enforce a mandatory condition.
+
+For a file organizer, one checkable condition could permit renaming files within the assigned directory while requiring every input file's contents to survive. A trusted storage service can compare the input snapshot with the staged result independently of the planner. Publication requires that check to pass on the exact diff under review. Claims such as “the files are organized well” remain for the reviewer. [Goal contract responsibilities](../engineering/repository-layout.md#42-goal-contract-enforcement-architecture-gcea)
 
 ## 6. Agents and goals as first-class objects
 
@@ -198,7 +211,6 @@ pub struct AgentBudget {
 pub struct AgentControlBlock {
     pub id: AgentId,
     pub parent: Option<AgentId>,
-    pub process: Option<ProcessId>,
     pub goal: GoalId,
     pub state: AgentState,
     pub priority: u8,
@@ -207,7 +219,7 @@ pub struct AgentControlBlock {
 }
 ```
 
-The kernel should own enforceable identity, resource accounting and execution state. An agent may have no live process while dormant; the process field above is a minimal example, not a limit on the number of execution contexts an agent can own. Semantic goal text, model context and detailed workflow state belong to the runtime. Budget fields here are illustrative internal types; the wire ABI must use fixed-width types and clearly defined units (Section 7).
+This is a logical view of an agent. Each associated process records its agent ID, so an agent can have zero or more live processes. In the Native design the kernel protects identity, process association and local resource limits. The runtime records why an agent is waiting, its definition version, model context and checkpoints. Brokers own reservations and settlement for external spending. Wire representations use fixed-width values and specified units (Section 7).
 
 ### 6.2 Goal descriptors
 
@@ -231,19 +243,32 @@ Illustrative user-space API:
 let goal = goal_create("Organize project files", policy, budget)?;
 goal_attach(agent, goal)?;
 goal_start(goal)?;
-let status = goal_wait(goal)?;
-goal_commit(goal)?;
+let outcome = goal_wait(goal)?;
+if outcome.completed() {
+    // The reviewer uses its separately granted handle for this goal.
+    let diff = goal_diff(review_handle)?;
+    goal_commit(review_handle, diff.version())?;
+}
 ```
 
 Explicitly cancelling a goal should propagate cancellation to its children, revoke the relevant authority, cancel supported in-flight requests, release resources, discard uncommitted changes and retain authorized audit history. Closing a handle should normally release a reference; cancellation on last close must be an explicit, documented policy so persistent goals are not accidentally destroyed.
 
-**Cancellation and publication contract.** Define a linearization point at which a goal becomes closing/cancelled: reject new children, capability derivations, submissions and commits after that point. Serialize authorization/reservation with dispatch and publication; a cancellation racing with a commit must have a recorded winner. Cancel or drain local operations and reclaim resources only after they are safe to release. For remote effects, mark already dispatched requests as confirmed, failed or unknown, keep cost reservations until reconciled and prevent retries from bypassing cancellation. On successful completion, retain a narrowly scoped review/commit handle if private changes are awaiting publication; completion is not an implicit commit.
+**Cancellation and publication.** Successful completion stops the goal's execution authority. Its private changes can await a separate decision by a reviewer who holds commit authority for that goal (`review_handle` above). The storage service binds publication to the reviewed diff and its base version. Cancellation or expiry can still discard a pending transaction. The authority service orders cancellation against new grants, dispatches and publication. If cancellation wins, it rejects new work and publication. If publication wins, the committed version remains visible. Record the outcome, drain or cancel local work and retain reservations for dispatched external requests until their outcomes are reconciled.
 
 ### 6.3 Lifecycle
 
-![Goal lifecycle diagram showing the main states Created, Ready, Running, and Completed/Failed/Cancelled, with transient states Waiting for model, Waiting for event, Waiting for approval, Suspended, and Checkpoint.](clavenar_lifecycle_diagram.png)
+```mermaid
+flowchart LR
+    subgraph Live["Live goal"]
+        Created --> Ready
+        Ready --> Running
+    end
+    Running -->|work succeeds| Completed
+    Running -->|unrecoverable failure| Failed
+    Live -->|cancel or expire| Cancelled
+```
 
-**Figure 6.3.** Goal and agent lifecycle with transient waiting states and safe-point checkpointing.
+**Figure 6.3.** Proposed goal execution states. Within a running goal, one agent can wait for a model, event or approval while another runs. An agent may be suspended or checkpointed at a safe point. A completed goal can still have a private transaction awaiting review (Section 12).
 
 Agents may live for months without continuously consuming CPU. Use asynchronous event queues and bounded mailboxes instead of polling. Define deadlines, failure propagation, orphan cleanup and safe cancellation points.
 
@@ -267,17 +292,19 @@ Keep the kernel ABI small. Many agent operations are better implemented as typed
 | `snapshot`, `restore`, `checkpoint` | Versioned state and recovery | Storage/runtime services |
 | `audit_read` | Authorized provenance inspection | Audit service |
 | `pipe`, `dup`, `dup2` (or explicit handle mapping) | Streams and child I/O | Kernel |
-| `reflex_install`, `reflex_attach`, `reflex_disable`, `reflex_inspect` | Verified reactive policy lifecycle | Restricted kernel engine, later milestone |
+| `reflex_install`, `reflex_attach`, `reflex_disable`, `reflex_inspect` | Bounded reactive policy lifecycle | User-space service first, optional verified kernel backend |
 | Tool discovery, MCP invocation, definition reload | Application protocols and configuration | User-space services over authenticated IPC |
 
-Retain conventional file operations where they make sense. The initial custom RV64 syscall convention uses `a7` for the syscall number, `a0`–`a2` for arguments, `a0` for the result and `ecall` to enter supervisor mode. It is not the Linux ABI. The versioned Clavenar ABI should define syscall numbers, fixed-width wire types, error values, argument structures, alignment and safe user-memory copying. Separate the CPU calling convention, syscall ABI and boot ABI. Share a small `no_std` ABI crate between kernel and SDK, use explicit layouts for ABI-facing structs, reject invalid sizes/versions/flags, and do not rely on Rust's unstable default ABI. The logical API may be identical across architectures even though entry instructions and registers differ.
+The table describes the proposed interface. The boot ABI at the Section 21 revision implements calls 0–22. On RV64, `ecall` enters the kernel with the call number in `a7` and up to four arguments in `a0`–`a3`. Results use `a0`, with all bits set for an error where applicable. On success, `wait` also returns the exit status or fault cause in `a1`, and `message_recv` returns the sender's task ID there when it delivers a message. The kernel assigns the sender ID. The current messages carry bounded byte strings. [Boot ABI and call table](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/README.md)
+
+The versioned ABI should define fixed-width wire types, error values, argument structures, alignment and user-memory copying. Specify the boot ABI separately. Use explicit layouts for shared structures and validate sizes, versions and flags. Other CPU architectures can implement the same logical operations with their own entry instructions and registers.
 
 ## 8. Goal-oriented shell
 
-Evolve the existing `rsh` shell into an interface supporting both conventional commands and autonomous goals. Use the same `clv` command groups on native and hosted systems; platform-specific functionality is discoverable through the backend feature contract (Section 31.6).
+The current native shell uses the `clv>` prompt for file and child-process commands. The proposed `clv` CLI adds goal management on Native and Hosted. The backend feature contract exposes platform-specific operations (Section 31.6).
 
 ```text
-clv:/$ clv goal run --transaction "Organize files in /home"
+clv:/$ clv goal run --policy organizer --transaction "Organize files in /home"
 Goal #42 created; agent #7 started
   Scope: /home (read, private write)
   Network: denied; delete: approval required
@@ -309,14 +336,14 @@ budget:
   tokens: 100000
   inference_requests: 50
   tool_calls: 100
-  max_cost_usd: 0.50
+  max_cost_usd_micros: 500000
   child_agents: 4
   deadline: 10min
 ```
 
 Additional possible dimensions include network bytes, outstanding requests, mailbox size, accelerator time, storage writes, energy and device usage. These are policy examples, not measurements of existing Clavenar OS performance.
 
-The trusted inference broker should reserve the maximum authorized cost before submitting a request, enforce output limits, reconcile provider-reported usage and account for outstanding requests. Use integer monetary units, not floating-point arithmetic. Unknown prices or unverifiable usage require a conservative policy. Agents must not hold unrestricted API credentials or network access that bypasses the broker.
+All monetary examples use integer millionths of a US dollar. Before dispatch, the trusted inference broker reserves a bound covering billable input, maximum output and applicable fees. A goal requiring a hard cost ceiling can use only providers and request types with an enforceable upper bound. The broker reconciles confirmed usage once and keeps the reservation for an unknown outcome. It holds provider credentials and controls access to the endpoint.
 
 On exhaustion, stop issuing new work, suspend or cancel the agent according to policy, notify its supervisor, preserve its checkpoint if authorized and release unused reservations. Cancellation may not eliminate the cost of an already submitted request.
 
@@ -366,7 +393,8 @@ Model inference does not belong in privileged kernel code. Define a provider-ind
 
 | Deployment | Role |
 |---|---|
-| External inference service | First prototype; simplest way to use capable models |
+| Deterministic mock | First provider for scripted goals and repeatable policy checks at v0.3 |
+| External inference service | First real provider, through the trusted host broker at native v0.4 |
 | Small local model on RISC-V | Later experiment with offline operation, privacy and resource constraints |
 | Dedicated accelerator | Long-term hardware/software co-design research |
 
@@ -382,11 +410,19 @@ A response is untrusted data, never executable authority. Parse a strict structu
 
 A distinguishing user-facing feature is the ability to inspect and undo an agent's changes. Build on the hierarchical RamFS and eventually a persistent copy-on-write filesystem.
 
-![Transactional autonomy diagram showing the flow from stable filesystem state to a private snapshot or overlay, then authorized agent operations, followed by diff inspection and validation, and finally a branch to either Commit or Discard.](clavenar_transaction_diagram.png)
+```mermaid
+flowchart TD
+    Base["Immutable base version"] --> Private["Private changes"]
+    Private --> Review["Freeze diff and verify contract"]
+    Review -->|current authority and approval| Publish["Atomically publish against expected base"]
+    Review -->|reject, cancel or expire| Discard["Discard private changes"]
+    Publish -->|base matches| Committed["New committed version"]
+    Publish -->|base changed| Conflict["Conflict: require a fresh review"]
+```
 
 **Figure 12.** Transactional execution flow for goal-scoped private state and publication or discard.
 
-An agent should normally operate on a private transaction. The original state is preserved until commit. Discard releases private changes. Atomic publication is a target guarantee for supported transaction backends, not a property of arbitrary file copying or OverlayFS. Use an immutable base/version, detect concurrent edits and serialize validation with publication. Recheck live capabilities and operation-bound approval against the exact diff and base version; publish using an atomic root/version switch or a defined journaled commit mechanism. Refuse workloads requiring atomic commit on backends that cannot provide it. For external effects see Section 12.2.
+An agent normally writes to a private transaction on an immutable base. Discard releases those changes. At commit the storage service checks the base version, frozen diff, required postconditions, live authority and applicable approval. It serializes this decision with cancellation and a single visible version switch. Each lookup sees a complete root. A reader that needs a consistent view across several lookups pins a version. A base conflict requires a new diff and review. A backend must satisfy the requested visibility and durability guarantees independently. The v0.4 RamFS target provides atomic publication within a boot. The v0.6 persistence gate adds recovery of the committed version after a crash. Section 12.2 covers external effects.
 
 ### 12.1 File versions and snapshots
 
@@ -407,7 +443,7 @@ Linux already supports overlay filesystems, snapshots and copy-on-write storage.
 
 ## 13. Observability, audit and time-travel debugging
 
-Record consequential mediated operations with authenticated actor and goal identifiers, resource identifiers, operation type, policy decision, outcome, sequence number and timestamp or logical clock. Include approved changes to authority and budget.
+Record the authenticated caller, target resource, operation, policy decision, outcome, sequence number and timestamp or logical clock. Include the goal for goal-owned work and the agent identity when one exists. A conventional child process is attributable to its goal without being assigned an agent identity. Reject an operation requiring a goal if the caller lacks a protected goal binding. Include approved changes to authority and budget.
 
 Potential replay data includes:
 
@@ -523,17 +559,29 @@ Example policy (configurable, not universal):
 | Confidential | Local inference only |
 | Secret | No external transmission; tightly controlled local processing |
 
-A conservative initial implementation can label an entire agent or goal as sensitive after it reads confidential data and prohibit its network and external inference access. More precise tracking of derived data, declassification, IPC and covert channels is an advanced research problem. Do not claim complete information-flow security unless the threat model and implementation support that claim.
+Native v0.4 restricts which resources and endpoints a goal may use. An approved model or tool can still receive any data the caller is allowed to send. For the later label-based profile, a conservative starting point is to classify the whole goal before admitting sensitive inputs. Apply that classification to children, IPC recipients, inference, tools, logs and artifact export. Decline a workload if a required channel cannot enforce the label. Finer tracking and explicit declassification need separate evidence under the threat model.
 
 ## 16. Human approval and prompt-injection containment
 
 Agents may misinterpret a goal or be manipulated by malicious instructions embedded in files, webpages, messages or model outputs. The system should remain safe even when a model proposes an unauthorized operation.
 
-![Approval and prompt-injection containment diagram showing the flow from untrusted content to a model proposal, then to a typed tool request, followed by policy validation and the outcomes Allow, Deny, or Request approval.](clavenar_approval_diagram.png)
+```mermaid
+flowchart TD
+    Input["Untrusted content or model proposal"] --> Request["Typed request from an authenticated caller"]
+    Request --> Check{"Within live authority, contract and budget?"}
+    Check -->|no| Deny["Deny and record outcome"]
+    Check -->|yes| Required{"Approval required?"}
+    Required -->|no| Final{"Live checks and reservation succeed?"}
+    Required -->|yes| Review["Trusted UI presents exact operation"]
+    Review -->|approved| Final
+    Review -->|declined or expired| Deny
+    Final -->|no| Deny
+    Final -->|yes| Dispatch["Submit authorized operation and record outcome"]
+```
 
 **Figure 16.** Validation and authorization flow for untrusted model-proposed operations.
 
-The approval service must bind authorization to the exact operation, resource, relevant version and parameters, with an expiration and replay protection. If the requested operation changes, approval must be obtained again. Protect the trusted approval UI from agent spoofing.
+Approval satisfies an additional condition on an already authorized operation. Bind it to the caller and goal, the canonical operation and arguments, target and relevant versions, and an expiry. The trusted dispatcher checks current rights and consumes the approval once for that operation. A changed target, diff or base requires fresh review. An authorized operator can grant additional rights through a separate, audited delegation. Protect the trusted approval UI from agent spoofing.
 
 ### 16.1 Example policy for a file organizer
 
@@ -595,7 +643,7 @@ Clavenar OS is not intended to replace Linux for general-purpose computing. Linu
 | Hardware co-design | Enables architecture-specific experiments | Linux on custom hardware | Minimal, focused platform for experimenting across the stack |
 | Embedded resource efficiency | May reduce memory and boot overhead | Embedded Linux, RTOSs, unikernels | Specialized software footprint and device-specific agent runtime |
 | Unified approval mechanism | Makes sensitive actions reviewable | Application-specific approval workflows | Standard operation-bound approval service |
-| Clean-slate Rust ABI | Reduces legacy complexity and encourages typed APIs | Rust user-space libraries and kernel abstractions | Ownership-oriented resource handles from the beginning |
+| Versioned syscall ABI | Makes the user/kernel contract explicit | Linux syscall ABI and typed user-space wrappers | Fixed-width wire types and checked Rust wrappers for native handles |
 | Goal descriptors | Makes authorized work a named, manageable resource | Process groups, cgroups, jobs, workflow runtimes | Unified lifetime for authority, budgets, agents, transactions and audit |
 
 ### 18.1 Where Linux is stronger
@@ -633,8 +681,8 @@ The individual concepts are not unprecedented. Relevant areas include capability
 | TempleOS | Example of a distinctive integrated OS philosophy, not a security model |
 | Erlang/OTP and actor systems | Supervision, message passing and fault recovery |
 | AIOS | Agent-oriented inference and resource scheduling above a host OS |
-| Agent libOS | Agent lifecycle, capabilities and checkpoints in a library/runtime-oriented design |
-| AgenticOS research | Intent-oriented authorization and information-flow restrictions |
+| Agent libOS | Yingqi Zhang describes a runtime with explicit authority, process-local agent state and checkpointing. [Agent libOS, arXiv v3](https://arxiv.org/abs/2606.03895v3) |
+| AgenticOS | Zhen Zhao and colleagues propose deriving mediated execution environments from structured intent declarations. [AgenticOS, arXiv v1](https://arxiv.org/abs/2606.21129v1) |
 | Linux eBPF | Verified restricted programs attached to system events; comparison baseline for reflexes |
 | WASI / WebAssembly | Portable modules with explicit host interfaces |
 | MCP | Standard tool and context interoperability |
@@ -644,115 +692,65 @@ The proposed distinction is a bare-metal Rust system (RISC-V first) designed fro
 
 ### 20.1 Background references for further investigation
 
-These are starting points, not a completed or newly verified literature review.
+These primary sources describe the mechanisms used for comparison.
 
-- RISC-V supervisor architecture and Sv39: https://docs.riscv.org/reference/isa/priv/supervisor.html
-- OpenSBI: https://github.com/riscv-software-src/opensbi
-- Linux cgroups v2: https://docs.kernel.org/admin-guide/cgroup-v2.html
-- Linux Landlock: https://docs.kernel.org/userspace-api/landlock.html
-- Linux seccomp: https://docs.kernel.org/userspace-api/seccomp_filter.html
-- Linux OverlayFS: https://docs.kernel.org/filesystems/overlayfs.html
-- CRIU: https://criu.org/
-- seL4: https://sel4.systems/
-- Redox OS: https://www.redox-os.org/
-- Fuchsia: https://fuchsia.dev/
-- Plan 9: https://9p.io/plan9/
-- Erlang/OTP supervision: https://www.erlang.org/doc/system/sup_princ.html
-- AIOS: https://github.com/agiresearch/AIOS
-- VirtIO specifications: https://www.oasis-open.org/committees/virtio/
+- [RISC-V Supervisor ISA, version 1.13](https://docs.riscv.org/reference/isa/v20260120/priv/supervisor.html)
+- [OpenSBI](https://github.com/riscv-software-src/opensbi)
+- [Linux cgroups v2](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+- [Linux Landlock](https://docs.kernel.org/userspace-api/landlock.html)
+- [Linux seccomp](https://docs.kernel.org/userspace-api/seccomp_filter.html)
+- [Linux OverlayFS](https://docs.kernel.org/filesystems/overlayfs.html)
+- [CRIU checkpoint/restore project](https://github.com/checkpoint-restore/criu)
+- [seL4](https://sel4.systems/)
+- [Redox OS](https://www.redox-os.org/)
+- [Fuchsia](https://fuchsia.dev/)
+- [Plan 9](https://9p.io/plan9/)
+- [Erlang/OTP supervision](https://www.erlang.org/doc/system/sup_princ.html)
+- [AIOS paper by Kai Mei and colleagues](https://arxiv.org/abs/2403.16971v5) and [project repository](https://github.com/agiresearch/AIOS)
+- [OASIS Virtual I/O Device specification, version 1.2](https://docs.oasis-open.org/virtio/virtio/v1.2/virtio-v1.2.html)
 
-Earlier discussion also identified possible recent papers under the names Agent libOS and AgenticOS. Verify their titles, authors, publication status and exact claims before citing them in a public paper or README.
+## 21. RV64 prototype and verification baseline
 
-## 21. Starting point: existing Rust RISC-V OS prototype
+Core revision `43e2b2c` builds kernel 0.0.1 for one RV64 hart on QEMU `virt` with OpenSBI. The package version identifies this prototype. Native v0.1 and v0.2 in Section 23 are release gates with additional evidence requirements. [Core source at the reviewed revision](https://github.com/clavenar/core/tree/43e2b2c20b4c271a2e90589607936dd14b6da5e8)
 
-The earlier discussion designed an educational kernel with the following source-level components. They need to be assembled, compiled, tested and hardened before they can serve as a secure platform.
+| Area | Implemented at this revision | Boundary |
+|---|---|---|
+| Boot and memory | A fixed pool of 21 frames supplies boot mappings and loaded images. Each task has an Sv39 root, read/execute user code and a private 4 KiB read/write, non-executable stack. Kernel and UART mappings are supervisor-only. | Syscalls copy nonempty buffers only within the current task’s stack. General user mappings and dynamic process allocation are future work. [Memory code](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/memory/sv39.rs) · [User copying](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/memory/usercopy.rs) |
+| Programs and scheduling | The build produces three separate static ELF64 images and embeds them in the kernel. The loader accepts one read/execute segment up to 8 KiB per program. Timer interrupts schedule runnable tasks round-robin. | The three task slots are fixed. `hello` and the shell start at boot. The shell can launch `hello` and `echo` by selector and collect each child’s completion. [Entry and boot programs](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/main.rs) · [ELF loader](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/memory/user_image.rs) · [Scheduler](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/scheduler.rs) |
+| Files and authority | Volatile RamFS has two read-only boot files, four writable file slots of 256 bytes each and four directory slots in addition to root. Each task has four handle slots with independent cursors. | Ordinary tasks start at `/`. A directory-scoped child uses read-only `open_at` relative to its grant. The parent can close its handle while the child continues using its own. [RamFS](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/fs/ramfs.rs) · [Task handles](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/fs/ramfs/handles.rs) |
+| IPC and shell | The `clv>` shell can send a launch request, receive a reply and wait for a particular child. Each request or reply holds up to 64 bytes and carries a kernel-assigned sender ID. | This protocol connects the shell with its children. General channels, pipes, events and agent identities belong to later milestones. [Boot ABI](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/crates/clv-abi/src/lib.rs) · [Shell commands](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/userspace/shell/main.rs) |
 
-```text
-rust-riscv-os/
-|-- .cargo/config.toml
-|-- Cargo.toml
-|-- linker.ld
-`-- src/
-    |-- main.rs
-    |-- boot.S
-    |-- fs.rs
-    `-- shell.rs
-```
+### 21.1 Reproduce the baseline
 
-- RV64 bare-metal Rust (`no_std`, `no_main`), OpenSBI boot and QEMU `virt`.
-- Supervisor-mode kernel and user-mode test application, currently linked into one image.
-- UART console input/output, polling and a simple interactive shell.
-- `ecall` trap entry, separate user/kernel stacks and custom syscall dispatcher.
-- Hierarchical RamFS: 32 inode slots including root, 4 KiB per regular file, 64-byte names, 16 ordinary open descriptors, absolute/relative paths, `.` and `..`, current directory, directory iteration and append support.
-- File/directory calls: `open`, `read`, `write`, `close`, `seek`, `unlink`, `mkdir`, `rmdir`, `chdir`, `getcwd`, `readdir`.
-- Shell commands: `help`, `ls`, `cd`, `pwd`, `mkdir`, `rmdir`, `touch`, `cat`, `rm`, `echo`, `clear`, `exit`; quoted arguments, basic line editing and echo-only `>`/`>>` redirection.
-
-### 21.1 Critical limitations to address
-
-The prototype is single-core, uses shared physical memory and trusts user pointers. Global descriptor and working-directory state do not isolate agents. Its RamFS is volatile and its shell commands are compiled into the same image rather than independently loaded executables. No Sv39, robust process scheduler, real agent runtime or persistent driver has been implemented and verified in the conversation.
-
-Before executing untrusted agents, implement and test:
-
-1. Correct boot initialization (including BSS initialization, ABI requirements and stack alignment), full trap frames, robust exception handling and safe supervisor/user stack switching.
-2. A physical page allocator and Sv39 page tables with distinct user/kernel mappings and permissions; kernel pages, MMIO and page tables must not be user-accessible.
-3. Checked user-memory copying with address-range, overflow, permission and lifetime validation; no direct unchecked Rust slices from arbitrary user pointers.
-4. A process loader, independent address spaces, timer interrupts, scheduling and safe context switching.
-5. Per-process handle tables, working directories and resource ownership; protected capability and quota enforcement.
-
-### 21.2 Sv39 essentials
-
-Sv39 is an RV64 virtual-memory scheme with 39-bit canonical virtual addresses, three page-table levels, 512 eight-byte entries per table and a 4 KiB base page size (with 2 MiB and 1 GiB superpages). The supervisor `satp` register selects the page-table root and mode. Leaf entries specify validity and read/write/execute/user permissions. `sfence.vma` synchronizes relevant address-translation changes. For example, kernel code should be readable/executable but not user-accessible, kernel data and UART MMIO should be supervisor-only, user code should be read/execute, and user data and stacks should be read/write without execute. Map necessary supervisor code and trap state before enabling paging. Use the hardware protection boundary, not Rust type safety alone, to isolate hostile programs.
-
-## 22. Proposed repository structure
+Use the build and QEMU commands for the pinned revision. At boot, look for `Clavenar kernel booted (v0.0.1)`, a loaded entry for each of the three programs, `Sv39 paging enabled` and the `clv>` prompt. In a fresh boot, enter the following commands at that prompt. [Build and run instructions](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/README.md)
 
 ```text
-clavenar/
-|-- Cargo.toml             workspace
-|-- kernel/
-|   |-- arch/              riscv64, x86_64, aarch64 (planned ports)
-|   |-- hal/               architecture-neutral contracts
-|   |-- mm/                frames, page tables, usercopy
-|   |-- sched/             timers, scheduling, accounting
-|   |-- process/           process and thread lifecycle
-|   |-- cap/               handle tables, rights, revocation
-|   |-- goal/              protected identities and quotas
-|   |-- ipc/               channels, pipes, events
-|   |-- reflex/            restricted bytecode, verifier, executor
-|   |-- fs/                initial RamFS and VFS interfaces
-|   |-- drivers/           UART, timer, VirtIO block/net/console
-|   `-- audit/             authenticated event production
-|-- crates/
-|   |-- abi/               stable wire types and syscall definitions
-|   |-- sdk/               agent and tool APIs
-|   |-- policy/            portable policy semantics
-|   |-- agent-definition/  manifest, instruction and package loader
-|   |-- agent-runtime/     goal coordination and workflows
-|   |-- tool-registry/     tool schemas and manifests
-|   `-- mcp-gateway/       shared broker interfaces
-|-- userspace/
-|   |-- init/              boot and service supervision
-|   |-- shell/             rsh / clv
-|   |-- coreutils/         ls, cat, grep, sort, etc.
-|   `-- services/         agentd, modeld, mcpd, netd, policyd,
-|                         approvald, credentiald, storage, audit
-|-- hosted/linux/          clavenard, sandbox, cgroups, persistence
-|-- virtual/
-|   |-- goal-machine/      goal VM lifecycle, leases, policy and image selection
-|   |-- qemu-backend/      QMP management, sandboxed QEMU process
-|   |-- vmm/               optional minimal direct-KVM Rust VMM (later)
-|   |-- image-manager/     versioned bootable images and artifact verification
-|   `-- bridge/            authenticated host/guest service transport
-|-- services/              shared user-space modeld, mcpd, approvals, audit
-|-- platforms/             QEMU and selected hardware configurations
-|-- agents/                example signed/versioned definitions
-|-- host/                  QEMU bridge and test harness
-|-- tests/                 isolation, quota, crash and replay tests
-|-- benchmarks/            equivalent native and Linux workloads
-|-- docs/                  architecture, threat model, ABI, experiments
-`-- tools/                 build, image creation and automation scripts
+mkdir /notes
+write /notes/report scoped-ok
+askat hello /notes report
+wait hello
+askat hello /notes ../hello.txt
+wait hello
+ask echo ping
+wait echo
+exit
 ```
 
-This is a target layout, not a repository already created by this document. Start with a minimal workspace and split modules when boundaries become meaningful.
+The first `askat` prints `scoped-ok` and `hello` exits with status 0. The second prints `cannot read requested file` and `hello` exits with status 1 even though `/hello.txt` exists. `echo` replies `ping` and exits with status 0. After `exit`, the kernel prints `all tasks exited`. A clean build with Rust 1.100.0, QEMU 10.0.13 and OpenSBI 1.6 produced these results on 25 November 2026. Section 26.3 describes the broader security evidence required for later releases.
+
+### 21.2 Sv39 and isolation
+
+Sv39 uses three page-table levels with 512 eight-byte entries per table. Bits 63–39 of a virtual address must equal bit 38. The base page size is 4 KiB, with 2 MiB and 1 GiB superpages available. The supervisor selects the translation mode and root with `satp` and synchronizes address translation with `sfence.vma`. The prototype uses 4 KiB leaves and changes the active root on a task switch. [RISC-V Supervisor ISA](https://docs.riscv.org/reference/isa/v20260120/priv/supervisor.html) · [Address-space implementation](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/memory/sv39.rs)
+
+## 22. Repository structure
+
+| Repository | Responsibility |
+|---|---|
+| `clavenar/core` | Kernel in `native/kernel/`, linker scripts in `native/linker/`, shared syscall definitions in `crates/clv-abi/`, native wrappers in `userspace/libclv/` and the three programs in `userspace/`. |
+| `clavenar/specifications` | Canonical architecture, engineering layout and future normative security and protocol documents. |
+| `clavenar/website` | Project site and documentation navigation. |
+
+The engineering layout defines the target paths for Hosted, Virtual, shared services and schemas. Shared services have one implementation with backend adapters. Core owns executable schemas and tests as they are added. Specifications owns their normative semantics and references the applicable Core revision. [Repository layout](../engineering/repository-layout.md)
 
 ## 23. Development roadmap
 
@@ -762,7 +760,7 @@ This is the master delivery roadmap for Clavenar OS, not just for the agent runt
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
-| 0 | Assemble and test existing kernel, RamFS and shell | Repeatable QEMU boot and filesystem/shell tests; first bootable kernel prototype |
+| 0 | Bring up the kernel, RamFS and shell | Reproduce a QEMU boot and exercise filesystem and shell commands. Section 21 records the current smoke check. |
 | 1 | Physical frame allocator and boot hardening; HAL boundaries | Reserved memory protected; architecture-neutral unit tests |
 | 2 | Sv39, trap frames and safe user copying | User-mode access to supervisor memory reliably faults |
 | 3 | Timers, scheduler, ELF loader and independent userland | Multiple isolated programs run and exit |
@@ -770,11 +768,11 @@ This is the master delivery roadmap for Clavenar OS, not just for the agent runt
 | 5 | Typed IPC, pipes, events and explicit child handles | Bounded messages, blocking/wakeup and authenticated identity |
 | 6 | Goal and agent identities/lifecycles | Create, suspend, inspect, cancel and clean up |
 | 7 | Hierarchical budgets and supervision | No budget oversubscription; child authority cannot expand |
-| 8 | Mock inference, tool registry, agent definitions and baseline action audit; begin AMD64 bring-up in parallel | Scripted goals; pinned instructions; schema and denied-action tests; authenticated action records |
-| 9 | Private RamFS transactions and approval service | Diff, commit, discard and operation-bound approvals |
+| 8 | Mock inference, tool registry, pinned definitions, initial goal contracts and action audit. Begin AMD64 bring-up in parallel. | A scripted goal runs within authorized scope and limits. Its resource handler rejects an out-of-contract effect and records the decision. |
+| 9 | Private RamFS transactions, independent checks and approval service | Commit binds the validated change set, base version and approval. A changed base or failed mandatory postcondition prevents publication. Discard preserves the base. |
 | 10 | Local MCP stdio and host inference/MCP bridge | Real model and mediated remote tools without guest networking |
 | 11 | Extended audit, provenance and controlled replay | Recorded run inspectable and replayable without real effects |
-| 12 | Reflex prototype in user space, then restricted kernel engine | Bounded execution, revocation and event-storm tests |
+| 12 | Bounded user-space reflex engine. Evaluate selected kernel helpers separately. | Demonstrate bounded work, revocation and event-storm control. Privileged execution has additional gates in Section 28.3. |
 | 13 | VirtIO block and durable transactions | Committed state survives reboot; crash recovery tested |
 | 14 | Durable agent checkpoints and restartable services | Recovery without duplicate external actions |
 | 15 | VirtIO-net, smoltcp, HTTP/TLS and native remote MCP | Authorized HTTPS requests; no network bypass |
@@ -785,16 +783,16 @@ This is the master delivery roadmap for Clavenar OS, not just for the agent runt
 
 ### 23.2 Native OS release milestones
 
-The following are proposed software release gates, not current implementation status or promised delivery dates. A release is cumulative: it includes the relevant earlier phases and passes their regression tests. The native kernel is present at every milestone; MCP is not required to boot, run ordinary programs or release the foundation OS. RV64 native release gates and Virtual release gates are independent. v0.5 targets a restricted kernel reflex prototype; the move into privileged execution is conditional on passing verifier, helper safety and latency tests. If these are not met, label the reflex work experimental and retain the user-space implementation rather than granting it kernel privilege.
+These are proposed software release gates. Each release carries forward earlier required phases and their regression checks. Native v0.1 can ship with conventional userland. Native v0.5 requires bounded reflexes in user space. Adding a privileged reflex engine requires verifier and helper safety evidence, bounded aggregate event cost and a measured reason to move that work into the kernel. Virtual milestones have their own gates.
 
-| Release | Native phases completed | Milestone | Required deliverable and release gate |
+| Release | Phases introduced | Milestone | Required deliverable and release gate |
 |---|---|---|---|
 | Internal prototype | 0 | Bootable kernel | Reproducible RV64/QEMU build and boot, UART, hierarchical RamFS, syscall and shell smoke tests. Not safe for untrusted programs. |
-| v0.1 | 0–3 | Clavenar OS — Foundation | Bootable RV64 OS with physical memory allocation, Sv39, safe user copying, timer scheduling, ELF loading, isolated processes, filesystem and shell. Demonstrate independently compiled user programs running and exiting. |
+| v0.1 | 1–3 | Clavenar OS — Foundation | Bootable RV64 OS with physical memory allocation, Sv39, safe user copying, timer scheduling, ELF loading, isolated processes, filesystem and shell. Demonstrate independently compiled user programs running and exiting. |
 | v0.2 | 4–5 | Clavenar OS — Secure Core | Per-process capability tables, confined file access, typed IPC, pipes, bounded queues and events. Demonstrate denied unauthorized access, rights attenuation and authenticated IPC. |
-| v0.3 | 6–8 | Clavenar OS — Agent Core | Goal/agent identities, cancellation, hierarchical budgets, supervision, agent instructions and skills, tool registry, deterministic mock inference and basic action audit. Demonstrate a bounded goal with ordinary child processes. Begin AMD64 boot and HAL work as a parallel porting milestone. |
-| v0.4 | 9–10 | Clavenar OS — Agentic MVP | Real model-backed agents via a restricted host inference bridge, local MCP over stdio, mediated remote MCP through the host, private RamFS transactions, operation-bound approvals and baseline audit. Pass Section 24 acceptance tests. No native TCP/IP or durable guest reboot recovery required; the host must retain durable records for real external operations and spending. |
-| v0.5 | 11–12 | Clavenar OS — Reflex | Extended audit and controlled replay, plus verified reactive kernel programs. Demonstrate bounded execution, revocation, event-storm controls and routine authorized responses without live inference. In parallel, target AMD64 guest support and Clavenar Virtual MVP (V0.5) on QEMU/KVM; neither blocks an RV64 release. |
+| v0.3 | 6–8 | Clavenar OS — Agent Core | Demonstrate a goal with ordinary child processes, scoped effects, cancellation, hierarchical budgets, supervision, pinned agent definitions, a tool registry, deterministic mock inference and attributed audit records. Begin AMD64 boot and HAL work in parallel. |
+| v0.4 | 9–10 | Clavenar OS — Agentic MVP | Pass Section 24 with a restricted host inference bridge, local and remote MCP, private RamFS transactions, independent contract checks and operation-bound approvals. The host journals real external requests and spending. Durable guest recovery belongs to v0.6. |
+| v0.5 | 11–12 | Clavenar OS — Reflex | Extended audit and controlled replay, plus a bounded user-space reflex that responds without inference. Demonstrate revocation and event-storm controls. A kernel backend is conditional on the additional evidence above. AMD64/KVM Goal Machines target the independent Virtual V0.5 gate. |
 | v0.6 | 13–14 | Clavenar OS — Persistence | VirtIO block storage, durable transactions, logical agent checkpoints, restartable services and tested crash recovery. Do not blindly repeat external side effects after recovery. |
 | v0.7 | 15 | Clavenar OS — Standalone | Native VirtIO-net, IP/TCP, DNS, HTTP/TLS and authorized remote MCP without a QEMU host protocol bridge. Real model inference may still use an external provider. This is standalone networking on supported platforms, not a claim of local LLM inference or broad physical hardware support. |
 | v0.8–v0.x | 16–19, prioritized as justified | Hardening and expansion | Stronger information-flow controls, assurance, ARM64 and further platform support, portable Wasm/WASI tools, selected real hardware and other research work. Scope and order depend on evidence and demand. |
@@ -812,9 +810,9 @@ Track A is the primary engineering track. Track B may progress independently onc
 |---|---|---|
 | Foundation | RV64/OpenSBI boot, UART, allocator, HAL, Sv39, scheduler, ELF and userland (v0.1) | Shared ABI/wire types, SDK interfaces, policy semantics, hosted development/test harness |
 | Secure core | Capabilities, pipes, IPC, events and authenticated identities (v0.2) | Linux-hosted isolation and capability broker, policy conformance tests |
-| Agent core | Goals, agent identities, supervision, budgets and mock inference (v0.3); start AMD64 boot/HAL | Agent definitions, workflows, tool registry, inference broker and RMCP gateway |
+| Agent core | Goals, agents, supervision, budgets, initial contract restrictions and mock inference (v0.3). Start AMD64 boot/HAL. | Agent definitions, workflows, tool registry, inference broker and RMCP gateway |
 | Agentic MVP | Native local MCP, transactional execution, approvals, restricted QEMU bridge (v0.4) | Host bridge, remote MCP, model adapters, developer SDK and end-to-end demo |
-| Reflex and persistence | Kernel reflex VM, audit/replay, persistent storage, agent recovery (v0.5–v0.6); AMD64 KVM guest conformance | Policy tooling, replay harness, management UI and hosted recovery experiments |
+| Reflex and persistence | Bounded user-space reflexes, audit/replay, persistent storage and agent recovery (v0.5–v0.6). Evaluate AMD64/KVM guest conformance separately. | Policy tooling, replay harness, management UI and hosted recovery experiments |
 | Standalone and expansion | Native networking, remote MCP, assurance, ARM64 and expanded AMD64 support (v0.7+) | Enterprise integrations, fleet management, Clavenar Guard and managed services |
 
 ```text
@@ -865,16 +863,18 @@ Run them in separate Sv39 address spaces with independent capability tables, eve
 
 ### 24.1 Demonstration scenario
 
-1. Boot Clavenar OS in QEMU and create two directories, `/home/work` and `/private`.
-2. Assign the filesystem agent a goal to organize `/home/work`, with explicit read/write and bounded inference authority.
-3. Start a private transaction and make authorized changes.
-4. Feed a malicious instruction telling the agent to read `/private` or transmit its contents. Verify the actual operation is denied, regardless of the model output.
-5. Attempt delegation of a right the parent does not own; verify rejection.
-6. Exhaust a token or action quota; verify no further unauthorized work is submitted.
-7. Inspect the transaction diff and audit trace. Demonstrate both commit and discard.
-8. Cancel the goal and verify child cleanup, capability revocation and quota release.
-9. Demonstrate real inference, one local stdio MCP tool and one mediated remote MCP tool using the same goal policy. A read-only remote tool is sufficient for the first demo.
-10. Once persistence is implemented (v0.6), reboot and verify committed state and authorized agent recovery.
+On native v0.4, start each run from the same known fixture with files under `/home/work` and `/private`. Give the filesystem agent a private transaction and permission to organize files only under `/home/work`. Use a fresh goal, budget and transaction for each outcome. Drive the denial cases with scripted requests so a cooperative model cannot mask a missing check.
+
+| Run | Observable result |
+|---|---|
+| Publish or discard | Stage the same rename in two runs. An independent check confirms the permitted scope and preserves file contents. On authorized commit only the reviewed change becomes visible. On discard the original tree remains intact. |
+| Invalid result or stale review | Stage a result that loses required contents, or change the base after approval. Publication fails in each run and the committed tree preserves the authoritative version. |
+| Denied access or delegation | Request a read of `/private`, then request a grant outside the supervisor's authority. Check the denials at the resource handlers, the attributed audit entries and the absence of data in the reply. |
+| Exhaustion | Competing child requests target the last available allocation. Admitted reservations fit the limit and the broker records no dispatch for the rejected work. |
+| Cancellation | Cancel with a local child active and a broker request outstanding. New dispatches stop, the child is cleaned up and its private changes cannot publish. The broker keeps any unsettled external reservation until reconciliation. |
+| Real interoperability | In a fresh authorized run, use a real model, one local stdio MCP tool and one approved read-only remote MCP tool through the host. Check the durable host operation IDs and reconciled usage against the goal. |
+
+Native v0.6 repeats the publication and cancellation cases across a guest reboot to exercise durable recovery.
 
 ### 24.2 Minimum acceptance criteria
 
@@ -883,6 +883,7 @@ Run them in separate Sv39 address spaces with independent capability tables, eve
 - A process cannot invent a valid capability or increase rights when deriving one.
 - Parallel child agents cannot overspend a parent's reserved budget.
 - An approval for one operation cannot authorize a different operation or resource.
+- A required postcondition that fails or cannot be checked blocks publication. A stale base, changed diff or revoked grant invalidates prior authorization.
 - Uncommitted changes do not affect the original filesystem.
 - Audit entries contain trusted agent and goal identities, not just agent-supplied strings.
 - A cancelled goal cannot submit new tool or inference requests; local children are cleaned up, and already dispatched requests have recorded outcomes without blind retries.
@@ -957,9 +958,10 @@ Physical attacks, compromised firmware, malicious host hypervisors, microarchite
 | No ambient authority | New workloads receive only explicit handles; attempts to bypass brokers or directory confinement fail. |
 | No rights amplification | Derivation and child creation cannot exceed the grantor's delegable rights. |
 | No budget oversubscription | Concurrent reservations cannot exceed the parent's unspent allocation; checkpoints do not restore spent resources. |
-| No unauthorized publication | Private changes remain isolated; commit validates current authority, reviewed diff and base version. |
+| No unauthorized publication | Commit checks current authority, required postconditions, reviewed diff and base version together. A failed check leaves the published root unchanged. |
 | No orphaned authority | Cancellation prevents new dispatches/grants and tears down local work; remote outcomes remain accounted for. |
-| No unbounded privileged reflex | Verified structure, bounded helper cost, revocation and aggregate event limits; fallback works without inference. |
+| No unbounded privileged reflex | Verify program structure, helper cost, revocation and aggregate event limits. Disabling every reflex leaves rights and budget checks in force. |
+| Restricted data egress | For a profile that promises label-based confinement, check recipients and artifact export as well as model and tool calls. Reject the profile when a required channel cannot enforce the label. |
 
 These are engineering obligations, not claims that any current implementation already meets them.
 
@@ -967,7 +969,7 @@ These are engineering obligations, not claims that any current implementation al
 
 Working name: **Clavenar OS**. Possible category description: *agent-native operating system* or *Autonomous Computing Operating System (ACOS)*. These are proposed positioning terms, not established technical standards.
 
-The umbrella brand is **Clavenar**, with Clavenar OS as the native operating system and `clv` as the proposed command-line interface. The project owner already owns `clavenar.io`. Trademark and organization-name clearance remain outstanding. Earlier working names have been superseded.
+The project uses **Clavenar** as its umbrella name, Clavenar OS for the native operating system and `clv` for the proposed management CLI. The website repository identifies `clavenar.io` as the project site. Trademark clearance remains open.
 
 ### 27.1 Five strongest selling points
 
@@ -1009,13 +1011,15 @@ The lower layers must remain operational if the model is unavailable or compromi
 
 ### 28.1 Candidate activities
 
+Rights checks, quota admission and deadline enforcement belong to the resource handler even when every reflex is disabled. A handler can emit an event after its decision. Dropping or coalescing that event may delay a notification while the decision still holds.
+
 | Event | Deterministic reflex | Intelligent follow-up |
 |---|---|---|
 | Memory pressure | Reclaim eligible caches; throttle authorized groups | Diagnose recurrent pressure |
-| Capability violation | Deny operation; update violation counters; rate-limit | Investigate suspicious behavior |
-| Goal deadline or budget exhaustion | Stop new work; revoke expired rights | Replan within a new authorized budget |
+| Capability denial | Aggregate denial events and notify the supervisor | Investigate suspicious behavior |
+| Goal deadline or budget exhaustion | Notify the supervisor that new work has stopped | Replan within a new authorized budget |
 | Process fault | Enforce bounded restart policy; publish event | Diagnose root cause |
-| Storage pressure | Enforce quota; emit notification | Select archival strategy |
+| Storage pressure | Emit a threshold notification | Select archival strategy |
 | Device threshold | Invoke predefined authorized response | Analyze anomaly |
 | Transaction failure | Abort private changes | Develop alternative plan |
 | Service outage | Notify supervisor; schedule recovery | Propose corrective procedure |
@@ -1096,7 +1100,7 @@ This allows intelligence to propose new operational behavior without making inte
 
 ## 29. Conventional userland, portable applications and tool contracts
 
-Clavenar supports ordinary programs, services, persistent agents and verified reactive programs. The architecture is agent-native, not agent-exclusive. An agent identity may be suspended without a live process; a process may execute without an agent identity or an explicit autonomous goal. A goal may include both agent and conventional child processes.
+The native prototype runs ordinary programs. The architecture also calls for services, persistent agents and bounded reactive programs. An agent identity may be suspended without a live process. A goal may include both agent and conventional child processes.
 
 | Execution model | Example | Representation |
 |---|---|---|
@@ -1105,7 +1109,7 @@ Clavenar supports ordinary programs, services, persistent agents and verified re
 | Reactive | On storage pressure, emit alert | Verified rule/bytecode |
 | Long-lived service | `mcpd`, `netd`, `modeld` | Supervised user process |
 
-Initial userland: `ls`, `cat`, `cp`, `mv`, `rm`, `mkdir`, `grep`, `find`, `sort`, `uniq`, `wc`, `echo`, `ps`, `kill`, `sh`, `clv`. Implement independent executables, standard streams, pipes, explicit handle mapping at spawn, and a small POSIX-like source interface. Full POSIX certification, Linux binary compatibility and a desktop environment are not initial goals. A native ELF file must match the target architecture and ABI. Wasm/WASI provides a complementary portable format, subject to runtime and host-interface compatibility; it does not replace hardware isolation or trusted host calls.
+The current shell implements file commands such as `ls` and `cat` as built-ins. The planned userland adds utilities such as `cp`, `mv`, `grep`, `find`, `sort`, `uniq`, `wc`, `ps` and `kill`, standard streams, pipes and explicit handle mapping at spawn. Native ELF programs must match the target architecture and Clavenar ABI. Wasm/WASI is a later option for portable tools. Full POSIX certification, Linux binary compatibility and a desktop remain outside the initial scope.
 
 ### 29.1 Tool manifests
 
@@ -1170,13 +1174,13 @@ Agent / external client -> authenticated MCP gateway (mcpd)
    -> response validation, accounting and audit
 ```
 
-The broker binds each invocation to authenticated process, agent and goal identities. Authorize the server identity, registered tool/version, resource scope, arguments, expiry and actual effect. A negotiated MCP capability describes protocol features; it is not a Clavenar security capability. Kernel IPC and network restrictions must prevent agents from bypassing the broker with direct sockets, stolen credentials or a generic proxy.
+The broker binds each invocation to its authenticated caller and authorized goal. It checks the server identity, registered tool version, scoped credential, arguments, expiry and permitted effect. For a local tool, its resource handlers enforce the allowed operations. For a remote tool, the guarantee also depends on the remote endpoint honoring the credential's scope and the agreed effect. Reject endpoints with unknown effects when a goal requires read-only execution. Negotiated MCP features describe what peers can speak. The broker determines what this caller may do.
 
 ```yaml
 goal: Review source code
 mcp:
   github:
-    repository: clavenar/kernel
+    repository: clavenar/core
     allow: [read_file, list_issues]
     approval: [create_issue, create_pull_request]
     deny: [delete_repository, merge_pull_request]
@@ -1215,7 +1219,7 @@ The v0.4 milestone must demonstrate an agent executing on the native OS, using a
 
 Across all steps, keep MCP parsing, HTTP, TLS, authentication and credentials in user space; preserve the kernel's deterministic capability/IPC enforcement. Maintain a protocol-version compatibility matrix and test actual authorization, cancellation, rate limits and error handling. Basic audit is present by v0.4; replay, durable transactions and recovery improve in v0.5–v0.6. Remote effects cannot be assumed reversible or exactly-once merely because the local goal is transactional.
 
-Reference starting points: https://modelcontextprotocol.io/ and https://github.com/modelcontextprotocol/rust-sdk. These are implementation references, not a newly verified protocol-version assessment.
+The 2025-11-25 MCP specification defines stdio and Streamable HTTP transports, negotiates versions and features during initialization, and marks the tasks facility experimental. Pin the version used in each interoperability run and record the features both peers negotiated. [Transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) · [Lifecycle](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle) · [Tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks) · [Official Rust SDK](https://github.com/modelcontextprotocol/rust-sdk)
 
 ## 31. Clavenar Hosted: Linux implementation
 
@@ -1280,7 +1284,7 @@ Each hosted goal owns a logical policy and lifecycle record, a sandbox/process g
 |---|---|---|
 | Goal identity | Trusted daemon record linked to isolated resources | Kernel-managed goal handle plus runtime metadata |
 | Capabilities | Protected broker handles, selected file descriptors, sandbox rules | Native capability table and rights checks |
-| Process and memory isolation | Namespaces, unprivileged process, LSMs; optional KVM | Hardware page tables and kernel process objects |
+| Process and memory isolation | Linux process address spaces and MMU protection. Namespaces, credentials and LSMs restrict access to host resources. An optional VM adds a guest boundary. | Hardware page tables and kernel process objects |
 | CPU and memory quotas | cgroups v2; cumulative accounting and cancellation | Kernel resource accounting and scheduler |
 | IPC and events | Unix sockets, pipes, pidfds, timerfd, epoll, inotify, netlink | Native typed IPC and kernel events |
 | Transaction | Copy/reflink, OverlayFS or filesystem snapshots plus commit service | Goal-scoped transactional VFS |
@@ -1302,7 +1306,9 @@ The initial Hosted backend runs Linux native processes (including existing Pytho
 
 ### 31.5 Workspaces, persistent state and hosted reflexes
 
-For initial coding workflows, an isolated Git worktree/branch or an immutable input copy with a private writable overlay is pragmatic. OverlayFS can isolate writes but does not itself provide a whole-workspace atomic commit. Snapshot inputs rather than relying on a mutable lower layer, check for concurrent changes, validate destinations and enforce commit authority. Do not give agents writable access to the original project outside the transaction. Provide journaled or atomic publication where supported; report partial failure accurately where not.
+For a repository job, give the sandbox an immutable input snapshot and a private writable workspace. Linked Git worktrees share repository data, including branch refs and, by default, configuration. Keep the original repository and shared writable Git metadata outside the sandbox. A broker can export the reviewed result and conditionally advance the authorized ref from the expected base. That operation publishes a Git revision. [Git worktree sharing rules](https://git-scm.com/docs/git-worktree#_refs) · [Conditional ref updates](https://git-scm.com/docs/git-update-ref)
+
+Atomic visibility for a live directory tree requires a backend that exposes the entire reviewed version in a single switch. An overlay can isolate private writes. Durable publication also requires recovery of the committed version after a crash. Reject goals whose required guarantee is unavailable. [Linux OverlayFS](https://docs.kernel.org/filesystems/overlayfs.html)
 
 Store goals, agent definition hashes, budgets, reservations, operation states, approvals, event subscriptions and logical checkpoints in SQLite initially; PostgreSQL is an optional later multi-node backend. Keep credentials outside workspace files. Use durable operation identifiers and a state machine (reserved, dispatched, confirmed, failed, unknown) for external actions. Reconcile unknown outcomes instead of automatically repeating them. Preserve audit and billing state across restarts.
 
@@ -1348,7 +1354,7 @@ Hosted technology candidates: Rust, Tokio, Axum, Reqwest, rustls, Serde, SQLx/SQ
 | H0.9 | Fleet/deployment management and enterprise features if demand is established |
 | H1.0 | Supported production profiles, hardening, isolation review, recovery, compatibility and operational documentation |
 
-The minimal broker/bridge service needed for native v0.4 must not wait for the complete Hosted roadmap. Use a small durable host journal for external operations from the first real request; later H0.7 adds full hosted agent checkpoint and recovery semantics. A solo developer should build only the shared services required by the native milestone before expanding the commercial control plane.
+Native v0.4 needs a working approval path for its reviewed guest changes and a durable host journal before its first real external request. It can use a small trusted reviewer and broker while Hosted develops its own workspace publication at H0.5. Hosted H0.7 adds full agent checkpoints and recovery. These tracks share contracts and can release independently.
 
 ## 32. Clavenar Virtual and Goal Machines
 
@@ -1408,20 +1414,22 @@ AMD64 means x86-64, including compatible Intel processors. KVM availability depe
 
 A no-NIC guest is a deliberately supported deployment, not merely a temporary limitation. Do not expose unintended device transports or host control sockets. The host should bind the service endpoint to a short-lived machine lease and authenticate session context independently of guest-provided identifiers. The VM does not receive an ordinary network adapter or arbitrary host filesystem mount. Its service channel exposes only structured operations approved by the host: inference, MCP, approvals, artifact import/export, audit and narrowly scoped credential-backed operations. Avoid exporting raw secrets. The host independently authorizes these operations using the machine's identity and goal lease, even if guest claims are malicious. Per-agent attribution from an uncompromised guest adds detail, but the outer host must not depend on those claims for the VM's aggregate limits. No NIC reduces direct egress opportunities; it does not eliminate exfiltration through allowed service calls or VM escape risks.
 
-Illustrative RV64 development launch, once the guest has a suitable VirtIO-console driver and bridge implementation:
+To attach a dedicated serial device to the prototype, build the release ELF as in Section 21 and run this command from Core. Guest messaging over that device requires the planned driver and broker.
 
 ```sh
 BRIDGE_DIR=$(mktemp -d)
 qemu-system-riscv64 \
     -machine virt -accel tcg -m 128M -smp 1 \
     -nographic -bios default -nic none \
-    -kernel clavenar.elf \
+    -kernel target/riscv64gc-unknown-none-elf/release/clavenar-kernel \
     -chardev socket,id=bridge,path="$BRIDGE_DIR/bridge.sock",server=on,wait=off \
     -device virtio-serial-device \
     -device virtserialport,chardev=bridge,name=org.clavenar.bridge
 ```
 
-The console and service channel remain separate. A production launcher must enforce socket permissions, bound messages, authenticate machine/session context, protect management endpoints and clean up resources. The command is a proposed configuration, not a tested release artifact. AMD64 uses an appropriate boot image/loader and device discovery rather than the RV64 OpenSBI boot path. For example, after implementing a compatible bootable disk image, `qemu-system-x86_64 -machine q35 -accel kvm -cpu host -m 128M -smp 1 -nographic -nic none -drive file=clavenar-amd64.img,format=raw` is a possible development launch. Firmware, transport and image formats must match the guest. These commands are not substitutes for a hardened production VMM profile.
+The UART carries the interactive shell. QEMU exposes the separate serial port at `$BRIDGE_DIR/bridge.sock`. A production launcher must restrict socket access, authenticate the machine session, bound messages and clean up resources. The planned AMD64 guest needs its own boot image or loader and matching virtual devices. An accelerated deployment also requires a compatible KVM host (Section 32.2).
+
+For a future AMD64 bootable disk, an illustrative development command is `qemu-system-x86_64 -machine q35 -accel kvm -cpu host -m 128M -smp 1 -nographic -nic none -drive file=clavenar-amd64.img,format=raw`. That image and its boot and device contracts belong to the AMD64 port.
 
 ### 32.4 Goal Machine contract and lifecycle
 
@@ -1444,7 +1452,7 @@ capabilities:
 budget:
   tokens: 50000
   tool_calls: 100
-  max_cost_usd: 2.00
+  max_cost_usd_micros: 2000000
   child_agents: 2
 transaction:
   commit_requires_approval: true
@@ -1457,7 +1465,7 @@ Illustrative values are not measured resource requirements. Goal Machines should
 3. Start a restricted VMM process and boot the guest. Establish the service session and deliver only the authorized goal configuration, not unrestricted host credentials.
 4. Run native guest processes, agents and tools. The guest enforces fine-grained capabilities and quotas; the host brokers independently enforce aggregate machine authority and costs. Monitor both planes.
 5. Return artifacts, a transaction diff and attributable audit records via mediated channels. Treat guest-provided files and metadata as untrusted; validate paths, links, sizes and formats on the host.
-6. Commit authorized changes through the trusted storage/publication service, or discard. Do not give the guest direct write access to original host data.
+6. The trusted host storage service owns publication. A reviewer with a separate live commit grant can review a retained diff after guest execution ends. Goal cancellation or expiry invalidates pending publication as specified in Section 6.2.
 7. On completion, cancellation or deadline, revoke the machine lease, refuse new external operations, terminate the VMM and remove temporary data according to retention policy. Preserve accounting and authorized audit records, reconcile pending external operations and release host allocations.
 
 A VM is not an autonomous transaction covering the entire external world. VM destruction cannot undo external API effects or cancel an already accepted remote operation unconditionally. Host lifecycle and budgets must remain authoritative across guest snapshots, restarts and replays.
@@ -1548,7 +1556,7 @@ The VMM configures KVM's supported interrupt-controller/timer facilities, execut
 use kvm_ioctls::{Kvm, VcpuExit};
 
 let kvm = Kvm::new()?;
-let vm = kvm.create_vm(0)?;
+let vm = kvm.create_vm()?;
 // Allocate/register guest memory; load image; configure platform and interrupt state.
 let mut vcpu = vm.create_vcpu(0)?;
 // Configure CPUID, special registers, general registers and boot state.
@@ -1597,12 +1605,12 @@ Both KVM backends use hardware-assisted CPU execution; removing QEMU does not in
 
 Reference starting points (verify current API versions and platform requirements during implementation):
 
-- Linux KVM API: https://docs.kernel.org/virt/kvm/api.html
-- QEMU system documentation: https://www.qemu.org/docs/master/system/index.html
-- rust-vmm ecosystem: https://github.com/rust-vmm/rust-vmm
-- kvm-ioctls: https://github.com/rust-vmm/kvm-ioctls
-- Firecracker: https://github.com/firecracker-microvm/firecracker
-- Cloud Hypervisor: https://github.com/cloud-hypervisor/cloud-hypervisor
+- [Linux KVM API](https://docs.kernel.org/virt/kvm/api.html)
+- [QEMU system documentation](https://www.qemu.org/docs/master/system/index.html)
+- [rust-vmm ecosystem](https://github.com/rust-vmm/rust-vmm)
+- [rust-vmm KVM bindings and VM creation API](https://docs.rs/kvm-ioctls/latest/kvm_ioctls/struct.Kvm.html#method.create_vm)
+- [Firecracker](https://github.com/firecracker-microvm/firecracker)
+- [Cloud Hypervisor](https://github.com/cloud-hypervisor/cloud-hypervisor)
 
 ## 34. Shared inference service and networking strategy
 
@@ -1631,7 +1639,7 @@ pub trait InferenceProvider {
 }
 ```
 
-Use an opaque model handle and authorized request context, not a provider URL or API key supplied by the agent. Define message, tool-call, streaming chunk, usage and error formats, bounded buffering, backpressure and timeout semantics. The guest-host channel may multiplex model, MCP, artifact, approval and audit services with length-delimited versioned frames and request IDs. Authenticate requests to the machine lease, derive goal authority from trusted state, reserve maximum permitted usage before dispatch, reconcile observed usage, handle cancellations and unknown outcomes, and ensure retries cannot replenish a budget. Strict cost ceilings depend on the provider's billing model and ability to bound request cost; disclose exceptions rather than promising absolute limits that cannot be enforced. API credentials remain in trusted brokers, never in an agent definition or guest image. Model and tool output is untrusted content.
+Use an opaque model handle and authorized request context, not a provider URL or API key supplied by the agent. Define message, tool-call, streaming chunk, usage and error formats, bounded buffering, backpressure and timeout semantics. The guest-host channel may multiplex model, MCP, artifact, approval and audit services with length-delimited versioned frames and request IDs. Authenticate requests to the machine lease, derive goal authority from trusted state, reserve maximum permitted usage before dispatch, reconcile observed usage, handle cancellations and unknown outcomes, and ensure retries cannot replenish a budget. If the provider cannot bound the charge, the broker rejects requests subject to a hard cost ceiling (Section 9). API credentials remain in trusted brokers, never in an agent definition or guest image. Model and tool output is untrusted content.
 
 ### 34.2 Native networking at v0.7
 
@@ -1650,11 +1658,11 @@ Implement TCP/IP eventually for standalone operation, not as a prerequisite to t
 
 Rust library candidates include `virtio-drivers`, `smoltcp`, `httparse`, `rustls`, `serde`, `serde_json` and `heapless`. They are integration candidates, not guaranteed drop-in `no_std` dependencies. TLS providers, secure random generation, certificate management, allocators, I/O and timing support require careful work. Verify TLS and DNS handling, including redirects, hostname validation, rebinding and SSRF defenses, and fail closed on unsupported mandatory policies. Label-based data egress controls require trusted data provenance and explicit declassification; a hostname allowlist alone does not prevent confidential data leakage.
 
-Native agents should ordinarily use `modeld` and `mcpd` rather than receiving raw unrestricted sockets. Conventional applications can request appropriately scoped networking authority where justified. The architecture must support direct networking without allowing a process to bypass its assigned goal policy. Reference: https://github.com/smoltcp-rs/smoltcp.
+Native agents should ordinarily use `modeld` and `mcpd` rather than receiving raw unrestricted sockets. Conventional applications can request appropriately scoped networking authority where justified. The architecture must support direct networking without allowing a process to bypass its assigned goal policy. [smoltcp project](https://github.com/smoltcp-rs/smoltcp)
 
 ## 35. Agent definitions, instruction hierarchy and portable packages
 
-Detailed behavior is a user-space concern. The kernel knows an agent's authenticated identity, goal, definition hash, process association, handles, budget, mailbox and lifecycle; it does not interpret natural-language instructions. The same agent definition should be usable in Hosted and Native where its dependencies are available. A runtime verifies package identity and requests authority; package configuration never grants it automatically.
+In the proposed Native architecture the kernel binds local execution contexts and handles to authenticated identities and goals. The runtime pins the agent definition hash and interprets its instructions. Hosted and Native can use the same definition when the backend supports its dependencies and required guarantees. The runtime verifies package identity and requests authority from the trusted authorizer.
 
 ```text
 /etc/clavenar/agents/diagnostics/
@@ -1707,7 +1715,7 @@ memory_mib = 64
 tokens_per_goal = 50000
 tool_calls_per_goal = 100
 max_child_agents = 2
-max_cost_usd = 1.00
+max_cost_usd_micros = 1_000_000
 
 [events]
 subscribe = ["service.failure", "memory.pressure"]
@@ -1768,6 +1776,7 @@ Compare QEMU/KVM, alternative VMMs and any custom Clavenar VMM only after equiva
 | ABI | Application Binary Interface: machine-level calling, layout and syscall conventions. The common logical API can map to different architecture-specific ABIs. |
 | Agent | Persistent autonomous identity that may execute through one or more processes over its lifetime. |
 | Goal descriptor | Protected handle to a goal's authorized scope, lifecycle, resource budget, delegated work and transaction references. |
+| Goal contract (GCEA) | Authorized, versioned constraints on a goal's effects, limits and required checks. Resource handlers enforce them at dispatch and publication. |
 | Capability | Kernel-managed or trusted-broker-managed handle granting specified rights to a resource; not an MCP feature flag. |
 | HAL | Hardware abstraction layer separating generic kernel mechanisms from CPU and platform details. |
 | Sv39 | RV64 three-level virtual memory scheme used for the reference kernel's address-space isolation. |

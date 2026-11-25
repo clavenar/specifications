@@ -5,7 +5,8 @@
 **Organization:** `clavenar`  
 **Primary repository:** `clavenar/core`  
 **Website:** `clavenar.io`  
-**Related document:** *Clavenar — Architecture and Vision*, draft 0.9  
+**Related document:** [Clavenar — Architecture and Vision](../architecture/architecture-and-vision.md)
+
 **Status:** Proposed engineering baseline. Repository names, directories, crates and release artifacts below describe the intended organization, not a claim that they have already been created or implemented.
 
 > One execution model, multiple deployment environments, a shared security contract.
@@ -734,7 +735,7 @@ core/
 | v0.8+ Expansion | Stronger information-flow assurance, ARM64 and portable Wasm | Optional Firecracker/direct-KVM VMM, pools and distributed management as justified |
 | v1.0 Production | Evidence-based security, stability, compatibility and operational readiness | Independent Hosted and Virtual production release gates |
 
-The detailed architecture and release criteria in the master architecture document remain authoritative for existing milestones. The GCEA module boundaries and contract-specific deliverables in this layout reflect the subsequent design discussion; incorporate them into the master roadmap before treating them as committed release gates. Do not require every optional backend to ship in the same release.
+Section 23 of the architecture document defines the proposed release gates. It places initial contract restrictions at v0.3 and independent checks on supported effects before publication at v0.4. The module boundaries in this layout support those gates. Optional backends have independent release criteria.
 
 ## 15. Engineering rules
 
