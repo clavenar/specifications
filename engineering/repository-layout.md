@@ -1,35 +1,35 @@
 # Clavenar — Repository Layout
 
-**Document revision:** 0.1  
-**Date:** 24 November 2026  
+**Document revision:** 0.2\
+**Date:** 25 November 2026\
 **Organization:** `clavenar`  
 **Primary repository:** `clavenar/core`  
 **Website:** `clavenar.io`  
-**Related document:** [Clavenar — Architecture and Vision](../architecture/architecture-and-vision.md)
+**Related document:** [Clavenar — Architecture and Vision, draft 0.11](../architecture/architecture-and-vision.md)
 
-**Status:** Proposed engineering baseline. Repository names, directories, crates and release artifacts below describe the intended organization, not a claim that they have already been created or implemented.
+**Status:** The [current Core tree](#21-current-core-tree) records kernel 0.0.1 at commit `43e2b2c`. The target trees describe where later components belong as they are implemented.
 
 > One execution model, multiple deployment environments, a shared security contract.
 
 ## 1. Repository strategy
 
-Clavenar is an agent-native operating system and execution platform with three deployment modes:
+Clavenar has three deployment modes. Native is the Rust kernel and userland shared by Bare Metal and Virtual.
 
-- **Clavenar Native / Bare Metal:** the independent Rust kernel and its native userland, with RV64 as the reference architecture and an early AMD64 port.
-- **Clavenar Hosted:** the Linux-hosted execution runtime, using the same high-level goal, agent, capability and policy semantics but Linux enforcement mechanisms.
-- **Clavenar Virtual:** the native kernel running as a VM guest, managed by host-side Goal Machine infrastructure. Virtual is a deployment of Native, not another operating system or kernel.
+- **Bare Metal** runs the native kernel directly on supported physical hardware, a later platform target.
+- **Hosted** is the proposed Linux runtime for the common goal, agent and policy contracts.
+- **Virtual** runs the native kernel as a VM guest. The RV64 prototype boots in QEMU today. The host-side Goal Machine manager and AMD64/KVM deployment are planned.
 
 Use a public engineering monorepo, `clavenar/core`, for the shared implementation. Keep the public specifications and website separate; split other repositories only when independent ownership, release cadence, distribution or access control warrants it.
 
-Native OS development remains the primary engineering objective. Hosted development accelerates tool and model integration, supplies the restricted QEMU bridge and provides a comparison baseline. Virtual introduces the native OS to existing Linux/KVM infrastructure without requiring customers to replace their host operating systems.
+Native OS development is the primary engineering objective. The planned Hosted services supply model and tool brokers for the guest bridge and a Linux comparison baseline. Virtual targets AMD64 Goal Machines on existing Linux/KVM infrastructure.
 
 ### 1.1 GitHub organization
 
-| Repository | Visibility | When to create | Responsibility |
+| Repository | Intended visibility | Stage | Responsibility |
 |---|---|---|---|
-| `clavenar/core` | Public | Day one | Native kernel and userland, Hosted, Virtual, shared crates, services, SDK and engineering tests |
-| `clavenar/specifications` | Public | Day one | Canonical architecture, security model, ABI and protocol specifications, ADRs and document releases |
-| `clavenar/website` | Public | Day one | Main website, public project information and documentation navigation |
+| `clavenar/core` | Public | In use | Native kernel and userland today. Planned home for Hosted, Virtual, shared services, SDK and engineering tests. |
+| `clavenar/specifications` | Public | In use | Canonical architecture and engineering layout, with space for normative security and protocol documents and ADRs. |
+| `clavenar/website` | Public | Scaffold | Project site content, assets and documentation navigation. |
 | `clavenar/registry` | Public | When packages stabilize | Agent, skill, workflow and tool package catalog; manifests, examples and distribution metadata |
 | `clavenar/examples` | Public | When examples need separate maintenance | Tutorials, SDK integrations and deployment examples; initially keep them in Core |
 | `clavenar/sdk-python` | Public | Independent SDK release | Python client SDK and language-specific packaging |
@@ -39,11 +39,46 @@ Native OS development remains the primary engineering objective. Hosted developm
 | `clavenar/cloud` | Private | When managed infrastructure exists | Hosted control plane, tenant management, managed Goal Machine orchestration and billing |
 | `clavenar/infrastructure` | Private | When operational deployments exist | Infrastructure-as-code, release and production operations; secret references, never plaintext credentials |
 
-Create only the first three repositories initially. All other names are reserved design choices; repository availability and permissions are not verified by this document. Keep reference agents and the first language bindings in Core until moving them has a concrete benefit.
+The first three repositories form the bootstrap. The remaining names are proposals. Keep reference agents and the first language bindings in Core until independent ownership or distribution justifies a split.
 
 ## 2. Main repository: `clavenar/core`
 
-The primary repository contains the implementation and executable test suites. The following is the **target layout**, not the day-one directory structure.
+### 2.1 Current Core tree
+
+These tracked paths are the entry points for the RV64 prototype. The kernel build script compiles three independent user ELFs. At boot the kernel loads the embedded images into task address spaces. [Core source at 43e2b2c](https://github.com/clavenar/core/tree/43e2b2c20b4c271a2e90589607936dd14b6da5e8)
+
+```text
+core/
+├── native/
+│   ├── kernel/
+│   │   ├── Cargo.toml
+│   │   ├── Cargo.lock
+│   │   ├── build.rs
+│   │   └── src/
+│   │       ├── main.rs                 # Boot, user images and scheduler setup
+│   │       ├── arch/riscv64/           # Entry, traps and timer
+│   │       ├── drivers/uart.rs
+│   │       ├── memory/                 # Boot frames, Sv39, ELF loading and user copies
+│   │       ├── scheduler.rs             # Task slots, child launches, waits and messages
+│   │       ├── syscall/mod.rs           # Boot syscall dispatch
+│   │       ├── fs/ramfs.rs              # Paths, directories and file storage
+│   │       └── fs/ramfs/handles.rs      # Per-task handles, cursors and directory grants
+│   └── linker/riscv64.ld
+├── crates/clv-abi/src/lib.rs            # Shared syscall numbers, flags and limits
+├── userspace/
+│   ├── user.ld                         # User ELF layout
+│   ├── libclv/                         # RV64 syscall wrappers
+│   ├── shell/                          # Input and dispatch, file commands, child commands
+│   ├── hello/
+│   └── echo/
+└── README.md                           # Build, QEMU and shell walkthroughs
+```
+
+The `platforms/qemu-riscv64-virt/`, `tests/`, `xtask/` and `.github/workflows/` directories currently contain placeholders. The running shell, directory grants and parent/child messages can be exercised directly in QEMU. [Reproduce the baseline](../architecture/architecture-and-vision.md#211-reproduce-the-baseline)
+
+### 2.2 Target Core tree
+
+This tree assigns ownership as Core grows. Sections 3–11 give the planned paths for its subsystems.
 
 ```text
 core/
@@ -171,10 +206,10 @@ native/
 | `object` | Protected object identities, references, generation numbers and lifetimes |
 | `capability` | Rights checks, delegation, attenuation and revocation |
 | `goal`, `agent` | Protected identities, ownership, cancellation and lifecycle primitives |
-| `budget` | Resource reservations, consumption accounting and bounded delegation |
+| `budget` | Local resource reservations and bounded delegation. Trusted brokers reserve and settle external spending. |
 | `contract` | Enforcement of supported deterministic, machine-readable restrictions |
 | `security` | Security labels and supported information-flow mechanisms |
-| `reflex` | Verified bounded policy execution, restricted helpers and event dispatch |
+| `reflex` (conditional) | Selected verified helpers and event dispatch if a privileged backend meets the evidence gates. Native v0.5 starts with bounded policies in user space. |
 | `fs` | Resource mediation and supported transactional filesystem mechanisms |
 | `audit` | Authoritative kernel events; durable storage is a user-space/storage responsibility |
 
@@ -189,7 +224,7 @@ Crates represent proposed long-term boundaries, not a requirement to create doze
 ```text
 crates/
 ├── clv-types/               # IDs, units, errors and common value types
-├── clv-abi/                 # Stable syscall numbers and binary layouts
+├── clv-abi/                 # Syscall numbers and shared ABI values
 ├── clv-object/              # Shared object model and reference semantics
 ├── clv-capability/          # Rights and attenuation semantics
 ├── clv-goal/                # Goal model and lifecycle rules
@@ -219,24 +254,22 @@ crates/
 ### 4.1 Dependency rules
 
 ```text
-CLI / SDK / applications
-          |
-          v
-Runtime / workflows / tool and inference integrations
-          |
-          v
-Execution interfaces and platform-specific backends
-          |
-          v
-Deterministic core: goals, rights, contracts, budgets, events, reflexes
-          |
-          v
-Primitive types and ABI
+Runtime, workflows and tool integrations     Native and Hosted adapters
+                     |                                  |
+                     +--------------+-------------------+
+                                    v
+                         clv-execution interfaces
+                                    |
+                                    v
+                 Shared goals, rights, contracts and budgets
+                                    |
+                                    v
+                             Primitive types
 
-Native kernel ---------> deterministic core + ABI + HAL
+Native kernel -> bounded shared code, clv-abi and architecture support
 ```
 
-The arrow means "may depend on." The deterministic core must not depend on the kernel, Linux, networking, Tokio, provider SDKs or application services. Prefer `no_std` for the core, using `alloc` only where supported. Kernel-usable code must have bounded resource behavior and explicit failure paths; it need not be completely allocation-free unless a particular call context requires it. Keep OS-dependent policy enforcement in the relevant backend or broker. Share schema, types, pure algorithms and test vectors, not trusted handles or enforcement state between deployments.
+Arrows show source dependencies. The shared runtime calls the execution interface, each backend implements it, and the deployment selects the backend. Keep the deterministic core independent of Linux, the native kernel, networking, Tokio and provider SDKs. Prefer `no_std` for kernel-usable code, with bounded resource use and explicit failure paths. Backends and brokers own their live handles and enforcement state. They can share schemas, pure algorithms and conformance vectors. [Shared implementation contracts](../architecture/architecture-and-vision.md#316-shared-implementation-contracts)
 
 Use stable-width integer representations and explicitly specified layouts for ABI and wire data. Do not expose Rust's default ABI, references or raw kernel pointers as public interfaces. Use separate wire representations rather than assuming in-memory C layouts are appropriate for all protocols.
 
@@ -271,7 +304,7 @@ services/contractd/
 └── tests/
 ```
 
-Natural-language goals can generate proposed contracts in user space, but cannot grant authority. A trusted authorizer approves the contract against existing rights. Resource handlers enforce operation-specific effects, limits and live capabilities. Independent checks evaluate supported preconditions, invariants and postconditions; publication must bind the exact validated change set, base version and approval. Use canonical serialization for operation digests, replay protection and version-aware approval checks. The planner is untrusted. The kernel need not understand semantic correctness, and a model-generated plan is not proof of safety.
+A planner proposes a contract in user space. A trusted authorizer binds its version and permitted effects to the caller's delegable rights. Resource handlers check live grants, limits and preconditions at dispatch. The contract service coordinates independent checks on the staged result. The storage service orders publication against cancellation and checks the frozen diff, expected base, required postconditions and applicable approval. An unsupported mandatory check blocks publication. Use a canonical encoding to identify the reviewed operation. [Goal contracts](../architecture/architecture-and-vision.md#52-intent-based-security) · [Transactional publication](../architecture/architecture-and-vision.md#12-transactional-autonomy-and-versioned-filesystem)
 
 ## 5. Clavenar Hosted
 
@@ -313,6 +346,8 @@ hosted/
 `clavenard` is the control plane. The Linux backend maps logical operations onto namespaces, cgroups v2, seccomp, filesystem restrictions and authenticated broker communication. The sandbox launcher is narrowly privileged and separated from untrusted workloads. The Hosted implementation must prevent direct syscall, network and credential bypass of the SDK's policy checks. It must disclose which guarantees it can actually provide, including limitations of revoking already-open descriptors and publishing filesystem overlays atomically.
 
 Start as a modular monolith with distinct logical service boundaries and minimal necessary isolated helper processes. Do not deploy every prospective daemon separately before there is a security, reliability or scaling reason. No custom Linux kernel module is required by this plan.
+
+For repository jobs, `hosted/storage/` supplies a pinned input snapshot and private writable workspace. The launcher keeps the original repository and shared writable Git metadata outside the sandbox. The trusted publication service checks the reviewed revision against the expected base. [Hosted workspaces and publication guarantees](../architecture/architecture-and-vision.md#315-workspaces-persistent-state-and-hosted-reflexes)
 
 ## 6. Clavenar Virtual and Goal Machines
 
@@ -385,6 +420,8 @@ services/
 These are logical boundaries; deployment may consolidate implementations while isolating credentials and privileged operations. Hosted services may use mature Rust libraries and Linux networking. Native services use native syscalls/IPC and compatible libraries; do not assume Linux or Tokio-dependent binaries already run on Native. Virtual may run a guest front end and a trusted host back end of the same logical service. The shared `modeld` provider adapters and MCP gateways should not be rewritten for each environment.
 
 ## 8. Native userland, CLI and SDK
+
+The current `clv>` prompt belongs to `userspace/shell/`. Its `files.rs` and `children.rs` modules implement shell commands using `userspace/libclv/`. The `cli/` directory below is the proposed management CLI for goals and backends.
 
 ```text
 userspace/
@@ -504,7 +541,7 @@ images/
 └── goal-machine/
 ```
 
-Core owns the machine-readable schemas and generated code consumed by its builds and tests. `specifications` owns normative semantic documentation and protocol explanations; its release identifies the exact schema revision from Core. Pin compatible revisions in both repositories and check them in CI rather than maintaining duplicate editable schemas. Where generation is used, identify the canonical schema and make changes there first. Initial experimental versions need not promise ABI stability; establish explicit compatibility rules before stable releases.
+The prototype's boot syscall numbers and constants live in `crates/clv-abi/src/lib.rs`. The kernel dispatcher and native wrappers consume those definitions. The `protocols/` tree above is proposed for machine-readable schemas as interfaces become versioned. Core owns the canonical schema and any generated code. Specifications owns the normative semantics and identifies the Core revision they describe. Establish compatibility rules before declaring an interface stable.
 
 Platform definitions are separate from CPU architecture implementations. They describe firmware, memory map, device discovery, transport, boot ABI, linker settings and image construction for a particular machine. RV64/OpenSBI under QEMU `virt` is the initial reference platform. Native AMD64 support is needed for efficient KVM guest execution on compatible Intel/AMD hosts. Support Firecracker and other VMMs only after their actual boot/device contracts have been implemented and tested.
 
@@ -512,7 +549,6 @@ Platform definitions are separate from CPU architecture implementations. They de
 
 ```text
 tests/
-├── unit/
 ├── integration/
 ├── kernel/
 ├── boot/
@@ -610,6 +646,8 @@ specifications/
 │   └── host-guest-protocol.md
 ├── engineering/
 │   └── repository-layout.md
+├── archive/
+│   └── imported-drafts/     # Original source documents
 ├── adr/
 │   ├── 0001-rust.md
 │   ├── 0002-riscv-first.md
@@ -622,25 +660,39 @@ specifications/
 │   └── 0009-goal-contracts.md
 ├── assets/
 │   └── diagrams/
-├── templates/               # Preserve the established v0.5 visual style
+├── templates/               # Planned publishing templates
 ├── tools/                   # Reproducible Markdown-to-PDF build
 └── releases/                # Release manifests; PDF assets or links to tags
 ```
 
 An ADR (Architecture Decision Record) captures context, decision, alternatives, consequences and status. ADRs are append-only in spirit; supersede prior decisions explicitly when the architecture changes.
 
-Keep the architecture document's canonical Markdown source and diagram assets together. Preserve the established document styling, including typography, teal palette, cover, table of contents and running headers. Store a reproducible rendering template and its build configuration when available, rather than relying on manual PDF patches indefinitely. Publish immutable, versioned documents (e.g. `clavenar-architecture-and-vision-0.9.pdf`) through releases; include any required diagram assets with source archives. Document revisions are separate from software and protocol releases. This repository-layout document has its own revision series and may be stored as `engineering/repository-layout.md`.
+Edit the live Markdown in `architecture/` and `engineering/`. The original drafts are preserved in [the import archive](../archive/imported-drafts/). Architecture draft 0.11 embeds four Mermaid diagrams in its Markdown. Store separately maintained figure assets under `assets/diagrams/`.
+
+The PDF publishing toolchain is planned. Its template should carry the intended typography, teal palette, cover, contents and running headers. A document release should identify the source commit, rendering configuration and figure dependencies so the published artifact can be reproduced. Architecture and repository layout each use their own document revision.
 
 ## 13. Build, CI and release conventions
 
-Use Cargo workspaces, `just` for human-facing commands and `xtask` for Rust build orchestration. Start with a root workspace and explicit members/default-members; select the kernel or user-space build target per invocation. If freestanding and host dependency/feature resolution conflicts arise, use nested independent workspaces rather than weakening the kernel's dependency boundary. Keep reproducible lockfiles for applications. Do not set a global bare-metal target for the entire repository. Keep architecture-specific linker flags and build profiles scoped appropriately.
+### 13.1 Build and boot the RV64 prototype
 
-Proposed developer commands (to be implemented):
+From the Core repository root, build kernel 0.0.1 through `native/kernel/Cargo.toml` and its lockfile. The release build needs stable Rust with the `riscv64gc-unknown-none-elf` target. The launch uses QEMU RV64 and OpenSBI. [Prerequisites and platform instructions at the checked revision](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/README.md)
+
+```sh
+cargo +stable rustc --locked --manifest-path native/kernel/Cargo.toml \
+  --target riscv64gc-unknown-none-elf --target-dir target --release \
+  -- -C "link-arg=-T${PWD}/native/linker/riscv64.ld" -C link-arg=--no-relax
+
+qemu-system-riscv64 -machine virt -smp 1 -m 128M -bios default -nographic \
+  -kernel target/riscv64gc-unknown-none-elf/release/clavenar-kernel
+```
+
+The serial console reports three loaded programs and `Sv39 paging enabled`. Type `help` at the `clv>` prompt to list the shell commands. After `exit` stops the shell, press `Ctrl+a` then `x` to quit QEMU.
+
+### 13.2 Planned tooling and releases
+
+The target build design adds a root Cargo workspace, `just` recipes and `xtask`. Give each component an explicit target and keep bare-metal linker flags scoped to the kernel build. If host and freestanding dependencies need separate resolution, they can use independent workspaces. The following recipes and CI workflows are proposed.
 
 ```bash
-git clone https://github.com/clavenar/core.git
-cd core
-
 just build riscv64
 just run riscv64
 just build x86_64
@@ -656,7 +708,7 @@ just fuzz
 just benchmark
 ```
 
-| CI workflow | Purpose |
+| Proposed CI workflow | Purpose |
 |---|---|
 | `rust.yml` | Formatting, Clippy, host unit tests and core dependency checks |
 | `riscv64.yml` | Cross-compile RV64, boot QEMU and run kernel/userland tests |
@@ -680,62 +732,29 @@ clavenar-riscv64-0.5.0.elf
 clavenar-x86_64-0.5.0.img
 clavenar-hosted-0.4.0-linux-x86_64.tar.gz
 clavenar-virtual-0.5.0-linux-x86_64.tar.gz
-clavenar-architecture-and-vision-0.9.pdf
-clavenar-repository-layout-0.1.md
+clavenar-architecture-and-vision-0.11.pdf
+clavenar-repository-layout-0.2.md
 ```
 
 These names describe future artifact conventions, not delivered software. Publish a tagged source revision, build/run instructions, supported-platform/ABI declarations, acceptance-test results, known limitations, checksums and, when supported, signatures and dependency/SBOM information. Use Apache 2.0 as the proposed Core license, subject to dependency and governance review. Keep essential enforcement, core audit primitives and conformance tests in the public foundation; do not rely on commercial extensions to make the open-source kernel secure. Keep commercial infrastructure and operational secrets outside public repos.
 
 ## 14. Day-one bootstrap
 
-Create the three initial repositories and populate only the directories needed for the first bootable implementation. This is a compact starting point, not a mandate to commit empty future crates or placeholder daemons.
-
-```text
-core/
-├── README.md
-├── LICENSE
-├── SECURITY.md
-├── ROADMAP.md
-├── Cargo.toml
-├── rust-toolchain.toml
-├── justfile
-├── .cargo/
-├── .github/workflows/
-├── native/
-│   ├── kernel/
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       ├── main.rs
-│   │       ├── arch/riscv64/
-│   │       ├── memory/
-│   │       ├── syscall/
-│   │       ├── drivers/
-│   │       └── fs/
-│   └── linker/riscv64.ld
-├── crates/
-│   ├── clv-types/
-│   ├── clv-abi/
-│   └── clv-capability/      # When the initial rights model is introduced
-├── userspace/              # Init, syscall wrappers and shell as they emerge
-├── platforms/qemu-riscv64-virt/
-├── tests/
-├── docs/
-└── xtask/
-```
+The [current Core tree](#21-current-core-tree) supports the bootable RV64 prototype. It already has per-task RamFS handles and scoped reads, plus one launch request and one reply per shell-launched child. The table maps future work to the proposed releases. Kernel package version 0.0.1 identifies the prototype. [Native release gates](../architecture/architecture-and-vision.md#232-native-os-release-milestones)
 
 | Native milestone | Grow these areas | Parallel Hosted / Virtual work |
 |---|---|---|
-| Internal prototype / v0.1 Foundation | RV64 boot, allocator, Sv39, safe copying, traps, ELF, scheduler, shell and RamFS | Reproducible QEMU launch, shared types and basic host harness |
-| v0.2 Secure Core | Object tables, capabilities, confined filesystem, IPC, events | Linux sandbox controls and common security tests |
-| v0.3 Agent Core | Goals, agents, hierarchical budgets, initial contract restrictions, definitions, mock inference and audit; begin AMD64 port | Hosted runtime and broker development; guest bridge preparation |
-| v0.4 Agentic MVP | Transactions, exact approvals, local MCP and real inference via host bridge | Reuse inference/MCP services; introduce restricted Goal Contract validation and independent checks for supported effects |
-| v0.5 Reflex | Bounded reflex prototype and replay; target AMD64 guest conformance | QEMU/KVM Goal Machine MVP, cancellation, mediated egress and artifact export |
+| v0.1 Foundation | Provide release evidence for RV64 boot, allocation, Sv39 isolation, checked user copying, scheduling, independent user ELFs, shell and RamFS. | Reproducible QEMU launch, shared types and basic host harness |
+| v0.2 Secure Core | General capability tables, rights attenuation, confined filesystem access, typed IPC, pipes, bounded queues and events. | Linux sandbox controls and common security tests |
+| v0.3 Agent Core | Goals, agents, hierarchical budgets, initial contract restrictions, definitions, mock inference and audit. Begin AMD64 bring-up in parallel. | Hosted runtime and broker development, guest bridge preparation |
+| v0.4 Agentic MVP | Private RamFS transactions, operation-bound approvals and independent checks before publication. Demonstrate local MCP, mediated remote MCP and real inference. | A restricted host bridge journals external requests and spending. |
+| v0.5 Reflex | Bounded user-space reflexes and controlled replay. Moving selected work into the kernel requires verifier and helper safety evidence, bounded event cost and a measured need. | Virtual V0.5 independently targets AMD64/QEMU/KVM Goal Machines, lease cancellation and artifact handling. |
 | v0.6 Persistence | Durable storage, recovery and checkpoints | Durable artifacts, accounting and pending external-operation reconciliation |
 | v0.7 Standalone | Native network service, IP/TCP, HTTPS, remote MCP and inference | Expanded VM conformance; retain no-NIC mode |
-| v0.8+ Expansion | Stronger information-flow assurance, ARM64 and portable Wasm | Optional Firecracker/direct-KVM VMM, pools and distributed management as justified |
+| v0.8+ Expansion | Stronger information-flow assurance, ARM64 and portable Wasm as justified | Optional Firecracker/direct-KVM VMM, pools and distributed management as justified |
 | v1.0 Production | Evidence-based security, stability, compatibility and operational readiness | Independent Hosted and Virtual production release gates |
 
-Section 23 of the architecture document defines the proposed release gates. It places initial contract restrictions at v0.3 and independent checks on supported effects before publication at v0.4. The module boundaries in this layout support those gates. Optional backends have independent release criteria.
+Hosted and Virtual have their own release criteria. Components can land in Core before their release gate is met. [Cross-product release gates](../architecture/architecture-and-vision.md#234-cross-product-release-gates)
 
 ## 15. Engineering rules
 
@@ -751,7 +770,5 @@ Section 23 of the architecture document defines the proposed release gates. It p
 10. Prefer small, reproducible deliverables and security tests to premature crate proliferation or a large set of empty repositories.
 
 ---
-
-**Recommended initial organization:** `clavenar/core`, `clavenar/specifications`, `clavenar/website`.
 
 **Core principle:** Clavenar is one coherent autonomous execution platform with three deployment modes, not three unrelated projects.

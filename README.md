@@ -4,7 +4,7 @@ This repository holds the public architecture, security model, ABI and protocol
 specifications, and architecture decision records.
 
 - [Architecture and vision, draft 0.11](architecture/architecture-and-vision.md)
-- [Repository layout, revision 0.1](engineering/repository-layout.md)
+- [Repository layout, revision 0.2](engineering/repository-layout.md)
 - `security/` holds security models and invariants.
 - `standards/` holds normative ABI and protocol documents.
 - `adr/` holds numbered architecture decision records.
