@@ -1,7 +1,7 @@
 # Clavenar OS — Architecture and Vision
 ## Infrastructure for autonomous intelligence
 
-**Architecture and vision — draft 0.10 — 25 November 2026**
+**Architecture and vision — draft 0.11 — 25 November 2026**
 
 **Project name:** Clavenar OS  
 **Umbrella brand:** Clavenar — clavenar.io  
@@ -38,7 +38,7 @@ Clavenar is not an agent-only OS. Conventional tools, services and native applic
 
 **How to read this document.** Sections 2–17 define the common architecture and core mechanisms; Sections 18–20 and 25–27 cover differentiation, evidence, threats and positioning. Sections 21–24 define the starting point, repository and authoritative delivery roadmap. Sections 28–36 specify reflexes, userland, MCP, deployment, inference, agent definitions and commercialization. Section 23 is the master release plan; later subsystem roadmaps depend on it. Appendix A defines frequently used terms. Document revision numbers are independent of software release numbers.
 
-**Draft 0.10** records the running RV64 baseline and aligns goal contracts, approval, publication and reflex release criteria across the design.
+**Draft 0.11** records the running RV64 baseline and aligns goal contracts, approval, publication and reflex release criteria across the design.
 
 ## 2. Design philosophy
 
