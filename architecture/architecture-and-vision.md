@@ -480,29 +480,47 @@ Replay can substitute recorded model responses and external inputs for live requ
 
 ### 13.2 Agent-native virtual filesystem
 
-```mermaid
-flowchart LR
-    accTitle: Proposed virtual filesystem
-    accDescr: The root exposes per-agent state, goal states, models, tools, events, approvals, snapshots, system inspection and conventional directories. Agent 1 illustrates the entries within one agent directory.
-    Root["/"] --- One["agents/1/"]
-    Root --- Two["agents/2/"]
-    One --- Entries["goal · status · budget · capabilities<br/>context/ · memory/ · inbox/<br/>checkpoints/ · audit/"]
-    Root --- Goals["goals/"] --- States["pending/ · active/ · completed/"]
-    Root --- Models["models/"] --- Locations["local/ · remote/"]
-    Root --- Tools["tools/"] --- Kinds["filesystem/ · network/ · sensors/"]
-    Root --- Events["events/ · approvals/ · snapshots/"]
-    Root --- Sys["sys/"] --- Inspection["kernel/ · cpu/ · memory/<br/>processes/ · devices/ · snapshots/"]
-    Root --- Standard["dev/ · bin/ · etc/ · tmp/ · home/"]
+```text
+/
+|-- agents/
+|   |-- 1/
+|   |   |-- goal
+|   |   |-- status
+|   |   |-- budget
+|   |   |-- capabilities
+|   |   |-- context/
+|   |   |-- memory/
+|   |   |-- inbox/
+|   |   |-- checkpoints/
+|   |   `-- audit/
+|   `-- 2/
+|-- goals/
+|   |-- pending/
+|   |-- active/
+|   `-- completed/
+|-- models/
+|   |-- local/
+|   `-- remote/
+|-- tools/
+|   |-- filesystem/
+|   |-- network/
+|   `-- sensors/
+|-- events/
+|-- approvals/
+|-- snapshots/
+|-- sys/
+|   |-- kernel/       version, uptime, syscalls
+|   |-- cpu/          architecture, harts
+|   |-- memory/       total, free, pages
+|   |-- processes/    status, memory, capabilities, threads
+|   |-- devices/
+|   `-- snapshots/
+|-- dev/
+|-- bin/
+|-- etc/
+|-- tmp/
+`-- home/
 ```
-
-**Figure 13.2.** Read paths from left to right. Entries grouped in one box are siblings. The proposed inspection paths expose the following data.
-
-| Path | Inspection data |
-|---|---|
-| `/sys/kernel/` | Version, uptime, syscalls |
-| `/sys/cpu/` | Architecture, harts |
-| `/sys/memory/` | Total memory, free memory, pages |
-| `/sys/processes/` | Status, memory, capabilities, threads |
 
 These are conceptual virtual interfaces backed by kernel objects or runtime services, not ordinary files that an agent may edit to grant itself permission. Sensitive context, register contents, audit records and resource information require explicit inspection rights. The design combines Plan 9-inspired resource interfaces with agent-oriented lifecycle management.
 
