@@ -1,12 +1,12 @@
 # Clavenar OS — Architecture and Vision
 ## Infrastructure for autonomous intelligence
 
-**Architecture and vision — draft 0.11 — 25 November 2026**
+**Architecture and vision — draft 0.12 — 27 November 2026**
 
 **Project name:** Clavenar OS  
 **Umbrella brand:** Clavenar — clavenar.io  
 **Platforms:** RV64 reference; AMD64 prioritized for hardware-accelerated Goal Machines; ARM64 later; Linux-hosted runtime and virtual deployment planned  
-**Implementation status.** Kernel 0.0.1 boots on QEMU RV64 with Sv39, a shell, RamFS and two launchable child programs. Section 21 records the source revision, limits and a reproducible check. Goal objects, agent budgets, transactions, model services and Goal Machines are proposed milestones.
+**Implementation status, 27 November 2026.** The RV64 kernel runs isolated programs and a goal with an agent and delegated helpers. It enforces file grants and byte budgets, records decisions, and supports review, commit or discard of one private rename. Kernel 0.0.35 (`f0b1003`) introduced the read-directory boundary. The QEMU walkthroughs were also checked on 0.0.36. Native v0.4 calls for real inference and MCP through a restricted host bridge. [Verified baseline](#21-rv64-prototype-and-verification-baseline) · [MVP scenario status](#241-demonstration-scenario)
 
 > Intelligence is untrusted. Authority is explicit. Autonomy is bounded. State is reversible where possible. Execution is accountable.
 
@@ -38,7 +38,7 @@ Clavenar is not an agent-only OS. Conventional tools, services and native applic
 
 **How to read this document.** Sections 2–17 define the common architecture and core mechanisms; Sections 18–20 and 25–27 cover differentiation, evidence, threats and positioning. Sections 21–24 define the starting point, repository and authoritative delivery roadmap. Sections 28–36 specify reflexes, userland, MCP, deployment, inference, agent definitions and commercialization. Section 23 is the master release plan; later subsystem roadmaps depend on it. Appendix A defines frequently used terms. Document revision numbers are independent of software release numbers.
 
-**Draft 0.11** records the running RV64 baseline and aligns goal contracts, approval, publication and reflex release criteria across the design.
+**Draft 0.12** updates the native implementation evidence and the six v0.4 demonstration scenarios. Section 23 defines the release gates.
 
 ## 2. Design philosophy
 
@@ -159,7 +159,7 @@ These fields describe a protected table entry. A caller presents an opaque handl
 - Object lifetime: handles cannot silently refer to recycled objects after deletion or restart.
 - No ambient bypass: raw device access, arbitrary memory mapping, unrestricted networking, generic proxy tools and privileged IPC must not circumvent restrictions.
 
-The prototype already checks each RamFS handle against the calling task's table. A scoped launch grants a read-only directory handle and starts the child without a working directory. Ordinary launches still receive access to the root namespace. General rights derivation, recursive revocation and goal-bound expiry are future mechanisms (Section 21).
+Only the boot shell starts with a RamFS working directory (`/`). The initial `hello` task and a plain child start with an empty RamFS handle table and no working directory. A directory grant lets a child use read-only `open_at` within that tree. A goal owner can grant one regular file, restrict who may receive it, and revoke its derived handles. With `--read-under`, even an explicitly granted file must be linked inside the permitted tree at read time. RamFS checks the resolved object on every read by a goal member, including a delegated helper. [Launch and handle initialization](https://github.com/clavenar/core/blob/f0b1003ba826ef95ce03e914a79ff36a6c75453b/native/kernel/src/scheduler.rs) · [Read confinement in QEMU](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#limit-file-reads-to-a-directory)
 
 ### 5.2 Intent-based security
 
@@ -295,13 +295,15 @@ Keep the kernel ABI small. Many agent operations are better implemented as typed
 | `reflex_install`, `reflex_attach`, `reflex_disable`, `reflex_inspect` | Bounded reactive policy lifecycle | User-space service first, optional verified kernel backend |
 | Tool discovery, MCP invocation, definition reload | Application protocols and configuration | User-space services over authenticated IPC |
 
-The table describes the proposed interface. The boot ABI at the Section 21 revision implements calls 0–22. On RV64, `ecall` enters the kernel with the call number in `a7` and up to four arguments in `a0`–`a3`. Results use `a0`, with all bits set for an error where applicable. On success, `wait` also returns the exit status or fault cause in `a1`, and `message_recv` returns the sender's task ID there when it delivers a message. The kernel assigns the sender ID. The current messages carry bounded byte strings. [Boot ABI and call table](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/README.md)
+The table describes the proposed service interfaces. The native RV64 ABI implements calls 0–79. `ecall` takes the number in `a7` and up to six arguments in `a0`–`a5`. The primary result is in `a0`, with additional registers defined per call. For example, `wait` returns the child's completion kind and detail, and typed IPC supplies a kernel-authenticated sender identity. [Shared syscall numbers](https://github.com/clavenar/core/blob/f0b1003ba826ef95ce03e914a79ff36a6c75453b/crates/clv-abi/src/lib.rs) · [Native ABI and wire formats](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/native-syscall-abi.md)
 
 The versioned ABI should define fixed-width wire types, error values, argument structures, alignment and user-memory copying. Specify the boot ABI separately. Use explicit layouts for shared structures and validate sizes, versions and flags. Other CPU architectures can implement the same logical operations with their own entry instructions and registers.
 
 ## 8. Goal-oriented shell
 
-The current native shell uses the `clv>` prompt for file and child-process commands. The proposed `clv` CLI adds goal management on Native and Hosted. The backend feature contract exposes platform-specific operations (Section 31.6).
+At the native `clsh>` prompt, `help` lists the implemented commands, including `goal create`, `agent run`, `goal diff`, `goal commit` and `goal audit --reads`. The shell tracks its current goal handle. [Runnable shell walkthroughs](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md)
+
+The following transcript illustrates the **proposed `clv` management CLI** for Native and Hosted. Section 31.6 defines how it would expose backend-specific operations.
 
 ```text
 clv:/$ clv goal run --policy organizer --transaction "Organize files in /home"
@@ -320,9 +322,7 @@ clv:/$ clv goal audit 42
 clv:/$ clv goal commit 42
 ```
 
-Other proposed commands: `clv goal inspect 42`, `clv goal cancel 42`, `clv goal rollback 42`, `clv agent suspend 7`, `clv agent resume 7`, `clv agent inspect 7`, `clv agent replay 7`, `clv agent rewind 7 --checkpoint 8`, `clv reflex list`, `clv reflex inspect 18`, `clv mcp inspect github`. Conventional tools remain usable without an agent. File history and snapshot commands can be added when storage supports them.
-
-These examples describe future interfaces, not commands supported by the present kernel.
+Other proposed commands include `clv goal inspect 42`, `clv goal cancel 42`, `clv goal rollback 42`, `clv agent suspend 7`, `clv agent resume 7`, `clv agent inspect 7`, `clv agent replay 7`, `clv agent rewind 7 --checkpoint 8`, `clv reflex list`, `clv reflex inspect 18` and `clv mcp inspect github`. Conventional tools remain usable without an agent. File history and snapshot commands can be added when storage supports them.
 
 ## 9. Resource accounting and economic budgets
 
@@ -711,6 +711,40 @@ These primary sources describe the mechanisms used for comparison.
 
 ## 21. RV64 prototype and verification baseline
 
+On 27 November 2026 the RV64 implementation was verified on QEMU `virt` with OpenSBI and one hart. Kernel 0.0.35 (`f0b1003`) is the functional baseline. Kernel 0.0.36 (`cd78ad9`) packages the walkthroughs and ABI reference used below. Package versions identify builds. Section 23 defines the evidence required for a native release. [0.0.35 source](https://github.com/clavenar/core/tree/f0b1003ba826ef95ce03e914a79ff36a6c75453b) · [0.0.36 build instructions](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/README.md#build-and-run-the-rv64-kernel)
+
+| Area | Implemented behavior | Prototype limit |
+|---|---|---|
+| Isolation and execution | The kernel loads four separately linked ELF images for `hello`, the shell, `echo` and `grep`. Each has an Sv39 root and a private 4 KiB stack. | One fixed task slot per program and a 47-frame boot pool. Each ELF has one read/execute segment of up to 28 KiB. [Boot and shell](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#boot-and-shell) |
+| Files and IPC | The shell grants file or confined directory handles. Children exchange typed requests and replies. A bounded pipe supports streaming file data, and the shell can wait for child completion events. | RamFS is volatile, with four writable file slots, four directory slots besides root and four handles per task. [RamFS](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/native-syscall-abi.md#ramfs) · [Pipes and events](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/native-syscall-abi.md#pipes-and-completion-events) |
+| Agents and budgets | A goal can run an agent, delegate a helper, restrict file reads, reserve reply bytes, suspend or cancel local work, and inspect attributed audit records. | One open goal, at most one agent and up to three member launches over the goal's lifetime. The budgets cover local bytes and launch slots. [Goal lifecycle](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#create-a-goal-and-inspect-its-children) · [Read limits](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#delegation-and-read-limits) |
+| Tools and publication | The pinned `find-greeting@2` definition invokes `text.search@1`. An agent can also propose a file rename for owner review, commit or discard. | The planner is scripted. A goal can hold one pending same-directory rename, bound to the RamFS revision and, optionally, the original file and its contents. [Mock tool invocation](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#invoke-a-registered-file-tool) · [Reviewed renames](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#reviewed-renames) |
+
+### 21.1 Reproduce the baseline
+
+Build and boot either revision above from its Core repository root. Check the package version in the boot banner, four `User ELF loaded entry=` lines, `Sv39 paging enabled` and the `clsh>` prompt. On a fresh boot, run this pinned definition. [Build and run](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/README.md#build-and-run-the-rv64-kernel)
+
+```text
+goal create --children 2 --allow-tool text.search@1 --read-bytes 18 --reply-bytes 36
+goal grant-file --delegate-to grep --argument Hello /hello.txt
+agent run hello --mock find-greeting@2
+wait hello
+recv hello
+agent status
+goal audit
+goal audit --reads
+goal budget
+goal close
+```
+
+The wait reports exit 0 and the reply prints `Hello from RamFS`. Check for `definition=find-greeting@2 sha256=` in the status and `caller=agent` and `tool=text.search@1` in the delegation audit. The helper reads 18 bytes. Sending the result to the agent and forwarding it to the shell spends 36 reply bytes. The final outputs report `read_bytes=18` and `available=0 reserved=0 spent=36`.
+
+### 21.2 Sv39 and isolation
+
+Sv39 uses three page-table levels with 512 eight-byte entries per table. Bits 63–39 of a virtual address must equal bit 38. The base page size is 4 KiB, with 2 MiB and 1 GiB superpages available. The supervisor selects the translation mode and root with `satp` and synchronizes address translation with `sfence.vma`. The prototype uses 4 KiB leaves and changes the active root on a task switch. [RISC-V Supervisor ISA](https://docs.riscv.org/reference/isa/v20260120/priv/supervisor.html) · [Address-space implementation](https://github.com/clavenar/core/blob/f0b1003ba826ef95ce03e914a79ff36a6c75453b/native/kernel/src/memory/sv39.rs)
+
+### 21.3 Historical baseline of 25 November 2026
+
 Core revision `43e2b2c` builds kernel 0.0.1 for one RV64 hart on QEMU `virt` with OpenSBI. The package version identifies this prototype. Native v0.1 and v0.2 in Section 23 are release gates with additional evidence requirements. [Core source at the reviewed revision](https://github.com/clavenar/core/tree/43e2b2c20b4c271a2e90589607936dd14b6da5e8)
 
 | Area | Implemented at this revision | Boundary |
@@ -720,7 +754,7 @@ Core revision `43e2b2c` builds kernel 0.0.1 for one RV64 hart on QEMU `virt` wit
 | Files and authority | Volatile RamFS has two read-only boot files, four writable file slots of 256 bytes each and four directory slots in addition to root. Each task has four handle slots with independent cursors. | Ordinary tasks start at `/`. A directory-scoped child uses read-only `open_at` relative to its grant. The parent can close its handle while the child continues using its own. [RamFS](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/fs/ramfs.rs) · [Task handles](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/fs/ramfs/handles.rs) |
 | IPC and shell | The `clv>` shell can send a launch request, receive a reply and wait for a particular child. Each request or reply holds up to 64 bytes and carries a kernel-assigned sender ID. | This protocol connects the shell with its children. General channels, pipes, events and agent identities belong to later milestones. [Boot ABI](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/crates/clv-abi/src/lib.rs) · [Shell commands](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/userspace/shell/main.rs) |
 
-### 21.1 Reproduce the baseline
+#### Reproduce kernel 0.0.1
 
 Use the build and QEMU commands for the pinned revision. At boot, look for `Clavenar kernel booted (v0.0.1)`, a loaded entry for each of the three programs, `Sv39 paging enabled` and the `clv>` prompt. In a fresh boot, enter the following commands at that prompt. [Build and run instructions](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/README.md)
 
@@ -738,15 +772,11 @@ exit
 
 The first `askat` prints `scoped-ok` and `hello` exits with status 0. The second prints `cannot read requested file` and `hello` exits with status 1 even though `/hello.txt` exists. `echo` replies `ping` and exits with status 0. After `exit`, the kernel prints `all tasks exited`. A clean build with Rust 1.100.0, QEMU 10.0.13 and OpenSBI 1.6 produced these results on 25 November 2026. Section 26.3 describes the broader security evidence required for later releases.
 
-### 21.2 Sv39 and isolation
-
-Sv39 uses three page-table levels with 512 eight-byte entries per table. Bits 63–39 of a virtual address must equal bit 38. The base page size is 4 KiB, with 2 MiB and 1 GiB superpages available. The supervisor selects the translation mode and root with `satp` and synchronizes address translation with `sfence.vma`. The prototype uses 4 KiB leaves and changes the active root on a task switch. [RISC-V Supervisor ISA](https://docs.riscv.org/reference/isa/v20260120/priv/supervisor.html) · [Address-space implementation](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/native/kernel/src/memory/sv39.rs)
-
 ## 22. Repository structure
 
 | Repository | Responsibility |
 |---|---|
-| `clavenar/core` | Kernel in `native/kernel/`, linker scripts in `native/linker/`, shared syscall definitions in `crates/clv-abi/`, native wrappers in `userspace/libclv/` and the three programs in `userspace/`. |
+| `clavenar/core` | Kernel in `native/kernel/`, linker scripts in `native/linker/`, shared syscall definitions in `crates/clv-abi/`, native wrappers in `userspace/libclv/` and the shell, `hello`, `echo` and `grep` in `userspace/`. |
 | `clavenar/specifications` | Canonical architecture, engineering layout and future normative security and protocol documents. |
 | `clavenar/website` | Project site and documentation navigation. |
 
@@ -757,6 +787,8 @@ The engineering layout defines the target paths for Hosted, Virtual, shared serv
 This is the master delivery roadmap for Clavenar OS, not just for the agent runtime or MCP. Deliver a bootable native RV64 kernel from the beginning, test it continuously in QEMU, and publish incremental OS releases as the relevant exit criteria are met. Conventional kernel foundations and independent userland precede the first secure autonomous workloads. The Linux-hosted runtime is complementary and must not block the native OS release sequence.
 
 ### 23.1 Native implementation phases
+
+The RV64 prototype exercises goal lifecycles and local budgets from phases 6–7, a pinned mock agent and tool checks from phase 8, and one reviewed RamFS rename from phase 9. The phase 10 host bridge is pending. Each release still requires the exit criteria in the tables below. [Current QEMU evidence](#241-demonstration-scenario)
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
@@ -865,14 +897,16 @@ Run them in separate Sv39 address spaces with independent capability tables, eve
 
 On native v0.4, start each run from the same known fixture with files under `/home/work` and `/private`. Give the filesystem agent a private transaction and permission to organize files only under `/home/work`. Use a fresh goal, budget and transaction for each outcome. Drive the denial cases with scripted requests so a cooperative model cannot mask a missing check.
 
-| Run | Observable result |
-|---|---|
-| Publish or discard | Stage the same rename in two runs. An independent check confirms the permitted scope and preserves file contents. On authorized commit only the reviewed change becomes visible. On discard the original tree remains intact. |
-| Invalid result or stale review | Stage a result that loses required contents, or change the base after approval. Publication fails in each run and the committed tree preserves the authoritative version. |
-| Denied access or delegation | Request a read of `/private`, then request a grant outside the supervisor's authority. Check the denials at the resource handlers, the attributed audit entries and the absence of data in the reply. |
-| Exhaustion | Competing child requests target the last available allocation. Admitted reservations fit the limit and the broker records no dispatch for the rejected work. |
-| Cancellation | Cancel with a local child active and a broker request outstanding. New dispatches stop, the child is cleaned up and its private changes cannot publish. The broker keeps any unsettled external reservation until reconciliation. |
-| Real interoperability | In a fresh authorized run, use a real model, one local stdio MCP tool and one approved read-only remote MCP tool through the host. Check the durable host operation IDs and reconciled usage against the goal. |
+On 27 November 2026 the guest checks below exercised the 0.0.35 mechanisms on kernel 0.0.36. The shell owns review and audit, and the goal can admit one agent along with its children or helpers. The separately authorized supervisor, filesystem agent and read-only monitor are still an integration milestone. Each link gives a reproducible guest check or, for external interoperability, the nearest implemented local operation.
+
+| Run | Required v0.4 result | Current RV64 evidence |
+|---|---|---|
+| Publish or discard | Stage the same rename in two runs. An independent check confirms the permitted scope and preserves file contents. On authorized commit only the reviewed change becomes visible. On discard the original tree remains intact. | Verified for one file. A staged name stays private, an authorized commit publishes it, and discard preserves the original. [Agent rename](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#let-the-goals-agent-propose-a-rename) · [Discard](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#discard-a-staged-rename) |
+| Invalid result or stale review | Stage a result that loses required contents, or change the base after approval. Publication fails in each run and the committed tree preserves the authoritative version. | Verified for a rename. An edit before staging can fail the preserved-content check. An edit after a passing review produces a commit conflict. [Postcondition check](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#preserve-a-goals-input-file) · [Stale review](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#inspect-rename-publication-decisions) |
+| Denied access or delegation | Request a read of `/private`, then request a grant outside the supervisor's authority. Check the denials at the resource handlers, the attributed audit entries and the absence of data in the reply. | Verified for an explicitly granted out-of-tree file and a disallowed tool delegation. The read audit shows `outside-read-scope` and zero bytes. The tool denial identifies the calling agent. [Private read](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#limit-file-reads-to-a-directory) · [Delegation denial](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#require-an-exact-tool-revision-for-a-goal) |
+| Exhaustion | Competing child requests target the last available allocation. Admitted reservations fit the limit and the broker records no dispatch for the rejected work. | Verified locally. With 12 of 24 reply bytes reserved, a second child requesting 13 is refused and the balances are preserved. External reservations and the host dispatch record are pending. [Competing reservations](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#reserve-reply-bytes-for-children) |
+| Cancellation | Cancel with a local child active and a broker request outstanding. New dispatches stop, the child is cleaned up and its private changes cannot publish. The broker keeps any unsettled external reservation until reconciliation. | Verified locally. Cancelling a goal stops a suspended child and discards its pending rename. Cancellation with an outstanding host request and reconciliation of its charge are pending. [Cancel a live child and inspect the diff](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#cancel-a-goal) |
+| Real interoperability | In a fresh authorized run, use a real model, one local stdio MCP tool and one approved read-only remote MCP tool through the host. Check the durable host operation IDs and reconciled usage against the goal. | Pending. The working guest example runs a pinned mock and a native search helper. The local stdio MCP protocol, host bridge, real provider, remote MCP call and durable host journal are still required. [Current native tool path](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#invoke-a-registered-file-tool) |
 
 Native v0.6 repeats the publication and cancellation cases across a guest reboot to exercise durable recovery.
 
@@ -1109,7 +1143,7 @@ The native prototype runs ordinary programs. The architecture also calls for ser
 | Reactive | On storage pressure, emit alert | Verified rule/bytecode |
 | Long-lived service | `mcpd`, `netd`, `modeld` | Supervised user process |
 
-The current shell implements file commands such as `ls` and `cat` as built-ins. The planned userland adds utilities such as `cp`, `mv`, `grep`, `find`, `sort`, `uniq`, `wc`, `ps` and `kill`, standard streams, pipes and explicit handle mapping at spawn. Native ELF programs must match the target architecture and Clavenar ABI. Wasm/WASI is a later option for portable tools. Full POSIX certification, Linux binary compatibility and a desktop remain outside the initial scope.
+The native shell implements `ls` and `cat` as built-ins. Its `grep -F` command launches a separate ELF with a read-only file grant, and `askfile --stream` uses a bounded pipe. Planned userland work includes `cp`, `mv`, `find`, `sort`, `uniq`, `wc`, `ps`, `kill`, standard streams and general handle mapping at spawn. Native ELF programs must match the target architecture and Clavenar ABI. Wasm/WASI is a later option. Full POSIX certification, Linux binary compatibility and a desktop remain outside the initial scope. [Native file and stream examples](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#requests-replies-and-file-streams)
 
 ### 29.1 Tool manifests
 

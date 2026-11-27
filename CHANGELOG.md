@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Architecture draft 0.12 records kernel 0.0.35 at `f0b1003` and the QEMU
+  checks repeated on 0.0.36. It corrects the default RamFS authority, retains
+  the historical 0.0.1 baseline and links evidence for the six native v0.4 scenarios.
+- Repository layout 0.3 maps the four native user programs, goal and RamFS
+  modules, QEMU walkthroughs and ABI reference at Core revision `cd78ad9`.
 - Revised the repository layout to 0.2 with the checked-in RV64 source tree,
   working Cargo and QEMU commands, and milestones aligned with architecture draft 0.11.
 - Bumped the architecture and vision document to draft 0.11.

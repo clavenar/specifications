@@ -1,15 +1,13 @@
 # Clavenar Specifications
 
-This repository holds the public architecture, security model, ABI and protocol
-specifications, and architecture decision records.
+This repository publishes the Clavenar architecture and engineering layout.
 
-- [Architecture and vision, draft 0.11](architecture/architecture-and-vision.md)
-- [Repository layout, revision 0.2](engineering/repository-layout.md)
-- `security/` holds security models and invariants.
-- `standards/` holds normative ABI and protocol documents.
-- `adr/` holds numbered architecture decision records.
-- `assets/diagrams/`, `templates/`, `tools/`, and `releases/` support document publishing.
+- [Architecture and vision, draft 0.12](architecture/architecture-and-vision.md) defines the goals, security model and release criteria.
+- [Verified RV64 baseline](architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline) and [MVP scenario status](architecture/architecture-and-vision.md#241-demonstration-scenario) document what runs in QEMU and how to reproduce it.
+- [Repository layout, revision 0.3](engineering/repository-layout.md) locates the current native implementation and maps the planned components.
+- [Changelog](CHANGELOG.md) records document revisions.
 
-The current architecture draft includes its four diagrams as Mermaid blocks.
-The imported source drafts are preserved in [the archive](archive/imported-drafts/).
-The document publishing toolchain and license are pending.
+The `security/`, `standards/` and `adr/` directories are reserved for
+standalone security specifications, protocol standards and decision records.
+The architecture document embeds its four diagrams as Mermaid blocks. The
+document publishing toolchain and license are pending. [Archived source drafts](archive/imported-drafts/)

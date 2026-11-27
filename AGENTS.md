@@ -4,15 +4,17 @@
 
 This workspace contains three independent Git repositories:
 
-- `core/` holds the engineering scaffold. Kernel source belongs in
+- `core/` holds the native implementation. Kernel source belongs in
   `core/native/kernel/src/`, shared Rust code in `core/crates/`, and
   cross-component tests in `core/tests/`.
 - `specifications/` holds architecture, engineering, security, protocol, and ADR
   documents. Diagram assets belong in `specifications/assets/diagrams/`.
 - `website/` holds public site content and assets in `website/content/` and
   `website/assets/`.
-- `docs/` holds the original drafts imported into `specifications/`. Edit the
-  copies in `specifications/` for future document revisions.
+- `core/docs/` holds the QEMU walkthroughs and the native syscall reference.
+  Historical drafts live in `specifications/archive/imported-drafts/`. Edit
+  the maintained documents in `specifications/architecture/` and
+  `specifications/engineering/`.
 
 Add setup instructions to each repository README when dependencies or
 configuration are required locally.

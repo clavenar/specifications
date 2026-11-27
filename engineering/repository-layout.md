@@ -1,13 +1,13 @@
 # Clavenar — Repository Layout
 
-**Document revision:** 0.2\
-**Date:** 25 November 2026\
+**Document revision:** 0.3\
+**Date:** 27 November 2026\
 **Organization:** `clavenar`  
 **Primary repository:** `clavenar/core`  
 **Website:** `clavenar.io`  
-**Related document:** [Clavenar — Architecture and Vision, draft 0.11](../architecture/architecture-and-vision.md)
+**Related document:** [Clavenar — Architecture and Vision, draft 0.12](../architecture/architecture-and-vision.md)
 
-**Status:** The [current Core tree](#21-current-core-tree) records kernel 0.0.1 at commit `43e2b2c`. The target trees describe where later components belong as they are implemented.
+The current tree records kernel 0.0.36 (`cd78ad9`) on 27 November 2026, including the 0.0.35 read-scope implementation and the reorganized Core documentation. The target trees describe planned components. [Current Core tree](#21-current-core-tree)
 
 > One execution model, multiple deployment environments, a shared security contract.
 
@@ -45,36 +45,48 @@ The first three repositories form the bootstrap. The remaining names are proposa
 
 ### 2.1 Current Core tree
 
-These tracked paths are the entry points for the RV64 prototype. The kernel build script compiles three independent user ELFs. At boot the kernel loads the embedded images into task address spaces. [Core source at 43e2b2c](https://github.com/clavenar/core/tree/43e2b2c20b4c271a2e90589607936dd14b6da5e8)
+The build embeds four separately compiled user ELFs. The shell, `hello`, `echo` and `grep` each get a fixed task slot. These are the source and documentation entry points for the prototype. [Core at `cd78ad9`](https://github.com/clavenar/core/tree/cd78ad979fd882270cbcc3786a46306f18471ae9)
 
 ```text
 core/
+├── README.md                            # Build, boot and try a directory-scoped read
+├── ROADMAP.md                           # Native release gates and MVP status
+├── docs/
+│   ├── qemu-walkthroughs.md              # Guest commands and expected results
+│   └── native-syscall-abi.md             # RV64 registers, call semantics and wire formats
 ├── native/
 │   ├── kernel/
 │   │   ├── Cargo.toml
 │   │   ├── Cargo.lock
-│   │   ├── build.rs
+│   │   ├── build.rs                      # Compile and embed the user ELFs
+│   │   ├── build/definition.rs           # Validate and pin mock agent definitions
 │   │   └── src/
-│   │       ├── main.rs                 # Boot, user images and scheduler setup
-│   │       ├── arch/riscv64/           # Entry, traps and timer
+│   │       ├── main.rs                   # Boot and scheduler setup
+│   │       ├── programs.rs               # Embedded program images and tool image hashes
+│   │       ├── arch/riscv64/              # Entry, traps and timer
 │   │       ├── drivers/uart.rs
-│   │       ├── memory/                 # Boot frames, Sv39, ELF loading and user copies
-│   │       ├── scheduler.rs             # Task slots, child launches, waits and messages
-│   │       ├── syscall/mod.rs           # Boot syscall dispatch
-│   │       ├── fs/ramfs.rs              # Paths, directories and file storage
-│   │       └── fs/ramfs/handles.rs      # Per-task handles, cursors and directory grants
+│   │       ├── memory/                    # Frames, Sv39, ELF loading and user copies
+│   │       ├── fs/ramfs.rs                # Paths, directories and file storage
+│   │       ├── fs/ramfs/                  # Handles, grants and staged renames
+│   │       ├── ipc.rs                     # Bounded typed messages
+│   │       ├── ipc/pipe.rs
+│   │       ├── scheduler.rs               # Task slots, launches, waits and events
+│   │       ├── scheduler/goal.rs          # Goal and agent lifetimes
+│   │       ├── scheduler/goal/            # Budgets, reads, delegation, rename review and audit
+│   │       └── syscall/mod.rs             # Native syscall dispatch
 │   └── linker/riscv64.ld
-├── crates/clv-abi/src/lib.rs            # Shared syscall numbers, flags and limits
-├── userspace/
-│   ├── user.ld                         # User ELF layout
-│   ├── libclv/                         # RV64 syscall wrappers
-│   ├── shell/                          # Input and dispatch, file commands, child commands
-│   ├── hello/
-│   └── echo/
-└── README.md                           # Build, QEMU and shell walkthroughs
+├── crates/clv-abi/src/                    # Syscall numbers, wire types and registries
+└── userspace/
+    ├── user.ld                           # User ELF layout
+    ├── libclv/                           # RV64 syscall wrappers
+    ├── shell/                            # clsh commands, help and audit display
+    ├── hello/                            # Agent and ordinary child program
+    │   └── definitions/                  # Versioned find-greeting TOML definitions
+    ├── echo/
+    └── grep/                             # Native search program behind text.search@1
 ```
 
-The `platforms/qemu-riscv64-virt/`, `tests/`, `xtask/` and `.github/workflows/` directories currently contain placeholders. The running shell, directory grants and parent/child messages can be exercised directly in QEMU. [Reproduce the baseline](../architecture/architecture-and-vision.md#211-reproduce-the-baseline)
+The `platforms/qemu-riscv64-virt/`, `tests/`, `xtask/` and `.github/workflows/` directories are reserved for future work. The checked-in QEMU walkthroughs give manual commands and expected results. [Walkthroughs](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md) · [Verified native baseline](../architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline)
 
 ### 2.2 Target Core tree
 
@@ -421,7 +433,7 @@ These are logical boundaries; deployment may consolidate implementations while i
 
 ## 8. Native userland, CLI and SDK
 
-The current `clv>` prompt belongs to `userspace/shell/`. Its `files.rs` and `children.rs` modules implement shell commands using `userspace/libclv/`. The `cli/` directory below is the proposed management CLI for goals and backends.
+The native `clsh>` prompt belongs to `userspace/shell/`. File and child commands use `userspace/libclv/`. The `goal.rs` module and its `goal/` subdirectory handle lifecycle commands, options and audit display. The `cli/` tree below is the proposed cross-backend `clv` management CLI.
 
 ```text
 userspace/
@@ -621,6 +633,8 @@ For benchmark comparisons use equivalent workloads, models, security policies, a
 
 ## 12. Public specifications repository
 
+The tree below assigns locations for future normative documents and release artifacts. The specifications index lists the published architecture and layout. [Published documents](../README.md)
+
 ```text
 specifications/
 ├── README.md
@@ -667,7 +681,7 @@ specifications/
 
 An ADR (Architecture Decision Record) captures context, decision, alternatives, consequences and status. ADRs are append-only in spirit; supersede prior decisions explicitly when the architecture changes.
 
-Edit the live Markdown in `architecture/` and `engineering/`. The original drafts are preserved in [the import archive](../archive/imported-drafts/). Architecture draft 0.11 embeds four Mermaid diagrams in its Markdown. Store separately maintained figure assets under `assets/diagrams/`.
+Edit the live Markdown in `architecture/` and `engineering/`. The original drafts are preserved in [the import archive](../archive/imported-drafts/). The architecture document embeds four Mermaid diagrams in its Markdown. Store separately maintained figure assets under `assets/diagrams/`.
 
 The PDF publishing toolchain is planned. Its template should carry the intended typography, teal palette, cover, contents and running headers. A document release should identify the source commit, rendering configuration and figure dependencies so the published artifact can be reproduced. Architecture and repository layout each use their own document revision.
 
@@ -675,7 +689,7 @@ The PDF publishing toolchain is planned. Its template should carry the intended 
 
 ### 13.1 Build and boot the RV64 prototype
 
-From the Core repository root, build kernel 0.0.1 through `native/kernel/Cargo.toml` and its lockfile. The release build needs stable Rust with the `riscv64gc-unknown-none-elf` target. The launch uses QEMU RV64 and OpenSBI. [Prerequisites and platform instructions at the checked revision](https://github.com/clavenar/core/blob/43e2b2c20b4c271a2e90589607936dd14b6da5e8/README.md)
+From the Core repository root, build the RV64 kernel with the checked-in manifest and lockfile. The commands below were verified with kernel 0.0.36 on QEMU `virt` and OpenSBI. Install stable Rust and the `riscv64gc-unknown-none-elf` target first. [Prerequisites and quickstart](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/README.md#build-and-run-the-rv64-kernel)
 
 ```sh
 cargo +stable rustc --locked --manifest-path native/kernel/Cargo.toml \
@@ -686,7 +700,7 @@ qemu-system-riscv64 -machine virt -smp 1 -m 128M -bios default -nographic \
   -kernel target/riscv64gc-unknown-none-elf/release/clavenar-kernel
 ```
 
-The serial console reports three loaded programs and `Sv39 paging enabled`. Type `help` at the `clv>` prompt to list the shell commands. After `exit` stops the shell, press `Ctrl+a` then `x` to quit QEMU.
+The serial console prints the kernel package version, four loaded ELF entries and `Sv39 paging enabled`. Type `help` at the `clsh>` prompt for shell commands. Press `Ctrl+a`, then `x`, to quit QEMU.
 
 ### 13.2 Planned tooling and releases
 
@@ -732,29 +746,17 @@ clavenar-riscv64-0.5.0.elf
 clavenar-x86_64-0.5.0.img
 clavenar-hosted-0.4.0-linux-x86_64.tar.gz
 clavenar-virtual-0.5.0-linux-x86_64.tar.gz
-clavenar-architecture-and-vision-0.11.pdf
-clavenar-repository-layout-0.2.md
+clavenar-architecture-and-vision-0.12.pdf
+clavenar-repository-layout-0.3.md
 ```
 
 These names describe future artifact conventions, not delivered software. Publish a tagged source revision, build/run instructions, supported-platform/ABI declarations, acceptance-test results, known limitations, checksums and, when supported, signatures and dependency/SBOM information. Use Apache 2.0 as the proposed Core license, subject to dependency and governance review. Keep essential enforcement, core audit primitives and conformance tests in the public foundation; do not rely on commercial extensions to make the open-source kernel secure. Keep commercial infrastructure and operational secrets outside public repos.
 
 ## 14. Day-one bootstrap
 
-The [current Core tree](#21-current-core-tree) supports the bootable RV64 prototype. It already has per-task RamFS handles and scoped reads, plus one launch request and one reply per shell-launched child. The table maps future work to the proposed releases. Kernel package version 0.0.1 identifies the prototype. [Native release gates](../architecture/architecture-and-vision.md#232-native-os-release-milestones)
+The native prototype grew from RV64 boot and per-task RamFS handles to typed IPC, goal supervision, byte budgets and a reviewed rename. The current kernel work lives in `native/kernel/src/scheduler/`, `native/kernel/src/fs/`, `crates/clv-abi/` and the corresponding user programs. Section 2.1 maps those paths. [Current Core tree](#21-current-core-tree)
 
-| Native milestone | Grow these areas | Parallel Hosted / Virtual work |
-|---|---|---|
-| v0.1 Foundation | Provide release evidence for RV64 boot, allocation, Sv39 isolation, checked user copying, scheduling, independent user ELFs, shell and RamFS. | Reproducible QEMU launch, shared types and basic host harness |
-| v0.2 Secure Core | General capability tables, rights attenuation, confined filesystem access, typed IPC, pipes, bounded queues and events. | Linux sandbox controls and common security tests |
-| v0.3 Agent Core | Goals, agents, hierarchical budgets, initial contract restrictions, definitions, mock inference and audit. Begin AMD64 bring-up in parallel. | Hosted runtime and broker development, guest bridge preparation |
-| v0.4 Agentic MVP | Private RamFS transactions, operation-bound approvals and independent checks before publication. Demonstrate local MCP, mediated remote MCP and real inference. | A restricted host bridge journals external requests and spending. |
-| v0.5 Reflex | Bounded user-space reflexes and controlled replay. Moving selected work into the kernel requires verifier and helper safety evidence, bounded event cost and a measured need. | Virtual V0.5 independently targets AMD64/QEMU/KVM Goal Machines, lease cancellation and artifact handling. |
-| v0.6 Persistence | Durable storage, recovery and checkpoints | Durable artifacts, accounting and pending external-operation reconciliation |
-| v0.7 Standalone | Native network service, IP/TCP, HTTPS, remote MCP and inference | Expanded VM conformance; retain no-NIC mode |
-| v0.8+ Expansion | Stronger information-flow assurance, ARM64 and portable Wasm as justified | Optional Firecracker/direct-KVM VMM, pools and distributed management as justified |
-| v1.0 Production | Evidence-based security, stability, compatibility and operational readiness | Independent Hosted and Virtual production release gates |
-
-Hosted and Virtual have their own release criteria. Components can land in Core before their release gate is met. [Cross-product release gates](../architecture/architecture-and-vision.md#234-cross-product-release-gates)
+Architecture Section 23 defines all native, Hosted and Virtual release gates. Section 24 records the file-organizer checks that run in QEMU and the host services still needed for native v0.4. [Native release milestones](../architecture/architecture-and-vision.md#232-native-os-release-milestones) · [Cross-product release gates](../architecture/architecture-and-vision.md#234-cross-product-release-gates) · [MVP evidence](../architecture/architecture-and-vision.md#241-demonstration-scenario)
 
 ## 15. Engineering rules
 
