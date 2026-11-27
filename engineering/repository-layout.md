@@ -5,7 +5,7 @@
 **Organization:** `clavenar`  
 **Primary repository:** `clavenar/core`  
 **Website:** `clavenar.io`  
-**Related document:** [Clavenar — Architecture and Vision, draft 0.12](../architecture/architecture-and-vision.md)
+**Related document:** [Clavenar — Architecture and Vision](../architecture/architecture-and-vision.md)
 
 The current tree records kernel 0.0.36 (`cd78ad9`) on 27 November 2026, including the 0.0.35 read-scope implementation and the reorganized Core documentation. The target trees describe planned components. [Current Core tree](#21-current-core-tree)
 
@@ -681,7 +681,7 @@ specifications/
 
 An ADR (Architecture Decision Record) captures context, decision, alternatives, consequences and status. ADRs are append-only in spirit; supersede prior decisions explicitly when the architecture changes.
 
-Edit the live Markdown in `architecture/` and `engineering/`. The original drafts are preserved in [the import archive](../archive/imported-drafts/). The architecture document embeds four Mermaid diagrams in its Markdown. Store separately maintained figure assets under `assets/diagrams/`.
+Edit the live Markdown in `architecture/` and `engineering/`. The original drafts are preserved in [the import archive](../archive/imported-drafts/). The architecture document embeds its Mermaid figures in Markdown. Store separately maintained figure assets under `assets/diagrams/`.
 
 The PDF publishing toolchain is planned. Its template should carry the intended typography, teal palette, cover, contents and running headers. A document release should identify the source commit, rendering configuration and figure dependencies so the published artifact can be reproduced. Architecture and repository layout each use their own document revision.
 

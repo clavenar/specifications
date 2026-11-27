@@ -1,7 +1,7 @@
 # Clavenar OS — Architecture and Vision
 ## Infrastructure for autonomous intelligence
 
-**Architecture and vision — draft 0.12 — 27 November 2026**
+**Architecture and vision — draft 0.13 — 27 November 2026**
 
 **Project name:** Clavenar OS  
 **Umbrella brand:** Clavenar — clavenar.io  
@@ -38,7 +38,7 @@ Clavenar is not an agent-only OS. Conventional tools, services and native applic
 
 **How to read this document.** Sections 2–17 define the common architecture and core mechanisms; Sections 18–20 and 25–27 cover differentiation, evidence, threats and positioning. Sections 21–24 define the starting point, repository and authoritative delivery roadmap. Sections 28–36 specify reflexes, userland, MCP, deployment, inference, agent definitions and commercialization. Section 23 is the master release plan; later subsystem roadmaps depend on it. Appendix A defines frequently used terms. Document revision numbers are independent of software release numbers.
 
-**Draft 0.12** updates the native implementation evidence and the six v0.4 demonstration scenarios. Section 23 defines the release gates.
+**Draft 0.13** illustrates goal supervision, filesystem and package layouts, the development tracks, and the proposed execution and deployment flows. Section 21 records the verified native baseline, Section 23 defines the release gates, and Section 24 tracks the six v0.4 demonstration scenarios.
 
 ## 2. Design philosophy
 
@@ -225,17 +225,16 @@ This is a logical view of an agent. Each associated process records its agent ID
 
 A goal descriptor could be the defining abstraction of Clavenar OS, analogous in spirit to a file descriptor but representing an authorized scope of work.
 
-```text
-Goal #42
-  Identity and owner
-  Structured policy and deadline
-  Authorized capabilities
-  Resource and economic budgets
-  Attached agents and child goals
-  Event subscriptions and pending operations
-  Private filesystem transaction
-  Audit and checkpoint references
+```mermaid
+flowchart LR
+    accTitle: Goal descriptor
+    accDescr: Goal 42 brings its owner, policy, capabilities, budgets, participants, events, private transaction and audit references together.
+    Goal["Goal #42"] --- Authority["Identity and owner<br/>Structured policy and deadline<br/>Authorized capabilities"]
+    Goal --- Work["Resource and economic budgets<br/>Attached agents and child goals<br/>Event subscriptions and pending operations"]
+    Goal --- State["Private filesystem transaction<br/>Audit and checkpoint references"]
 ```
+
+**Figure 6.2.** A goal descriptor holds the authority, participants and state for one goal.
 
 Illustrative user-space API:
 
@@ -370,14 +369,18 @@ When one agent waits for inference, another can use CPU time, interact with a se
 
 ### 10.1 Native multi-agent supervision
 
-```text
-Human operator
-  Goal: Diagnose system failure
-  Supervisor agent: 10,000 token budget
-    |-- Log agent:        3,000 tokens, read-only log access
-    |-- Diagnostic agent: 4,000 tokens, system observation
-    `-- Repair agent:     3,000 tokens, restricted repair capability
+```mermaid
+flowchart TB
+    accTitle: Delegating a diagnostic goal
+    accDescr: A human assigns a diagnostic goal to a supervisor with 10,000 tokens. The supervisor delegates 3,000 to log inspection, 4,000 to diagnosis and 3,000 to restricted repair.
+    Operator["Human operator"] --> Goal["Diagnose system failure"]
+    Goal --> Supervisor["Supervisor agent<br/>10,000 tokens"]
+    Supervisor --> Log["Log agent<br/>3,000 tokens<br/>Read-only log access"]
+    Supervisor --> Diagnostic["Diagnostic agent<br/>4,000 tokens<br/>System observation"]
+    Supervisor --> Repair["Repair agent<br/>3,000 tokens<br/>Restricted repair capability"]
 ```
+
+**Figure 10.1.** The three child budgets add up to the supervisor’s 10,000 tokens. Each child receives authority for its own task.
 
 Implement bounded mailboxes, authenticated sender identity, typed messages, agent discovery restricted by authority, supervision trees, cancellation propagation and child cleanup. An agent cannot delegate authority or budget that it does not possess. Shared budgets must be reserved atomically to prevent oversubscription by concurrent children.
 
@@ -426,12 +429,14 @@ An agent normally writes to a private transaction on an immutable base. Discard 
 
 ### 12.1 File versions and snapshots
 
-```text
-notes.txt
-  v1: Hello
-  v2: Hello world
-  v3: Hello from Clavenar
+```mermaid
+flowchart LR
+    accTitle: Three versions of notes.txt
+    accDescr: The file contains Hello in version 1, Hello world in version 2 and Hello from Clavenar in version 3.
+    V1["v1<br/>Hello"] --> V2["v2<br/>Hello world"] --> V3["v3<br/>Hello from Clavenar"]
 ```
+
+**Figure 12.1.** Successive contents of `notes.txt`.
 
 Proposed operations: `history`, `snapshot`, `restore`, `diff`, `commit` and `rollback`. Use bounded version retention and charge snapshot storage to goals. A simple RamFS prototype can copy the full filesystem for a small number of transactions; page/block-level copy-on-write is a later optimization. A persistent implementation needs journaling or equivalent crash-consistent commit semantics, reference counts, garbage collection and recovery tests.
 
@@ -475,47 +480,29 @@ Replay can substitute recorded model responses and external inputs for live requ
 
 ### 13.2 Agent-native virtual filesystem
 
-```text
-/
-|-- agents/
-|   |-- 1/
-|   |   |-- goal
-|   |   |-- status
-|   |   |-- budget
-|   |   |-- capabilities
-|   |   |-- context/
-|   |   |-- memory/
-|   |   |-- inbox/
-|   |   |-- checkpoints/
-|   |   `-- audit/
-|   `-- 2/
-|-- goals/
-|   |-- pending/
-|   |-- active/
-|   `-- completed/
-|-- models/
-|   |-- local/
-|   `-- remote/
-|-- tools/
-|   |-- filesystem/
-|   |-- network/
-|   `-- sensors/
-|-- events/
-|-- approvals/
-|-- snapshots/
-|-- sys/
-|   |-- kernel/       version, uptime, syscalls
-|   |-- cpu/          architecture, harts
-|   |-- memory/       total, free, pages
-|   |-- processes/    status, memory, capabilities, threads
-|   |-- devices/
-|   `-- snapshots/
-|-- dev/
-|-- bin/
-|-- etc/
-|-- tmp/
-`-- home/
+```mermaid
+flowchart LR
+    accTitle: Proposed virtual filesystem
+    accDescr: The root exposes per-agent state, goal states, models, tools, events, approvals, snapshots, system inspection and conventional directories. Agent 1 illustrates the entries within one agent directory.
+    Root["/"] --- One["agents/1/"]
+    Root --- Two["agents/2/"]
+    One --- Entries["goal · status · budget · capabilities<br/>context/ · memory/ · inbox/<br/>checkpoints/ · audit/"]
+    Root --- Goals["goals/"] --- States["pending/ · active/ · completed/"]
+    Root --- Models["models/"] --- Locations["local/ · remote/"]
+    Root --- Tools["tools/"] --- Kinds["filesystem/ · network/ · sensors/"]
+    Root --- Events["events/ · approvals/ · snapshots/"]
+    Root --- Sys["sys/"] --- Inspection["kernel/ · cpu/ · memory/<br/>processes/ · devices/ · snapshots/"]
+    Root --- Standard["dev/ · bin/ · etc/ · tmp/ · home/"]
 ```
+
+**Figure 13.2.** Read paths from left to right. Entries grouped in one box are siblings. The proposed inspection paths expose the following data.
+
+| Path | Inspection data |
+|---|---|
+| `/sys/kernel/` | Version, uptime, syscalls |
+| `/sys/cpu/` | Architecture, harts |
+| `/sys/memory/` | Total memory, free memory, pages |
+| `/sys/processes/` | Status, memory, capabilities, threads |
 
 These are conceptual virtual interfaces backed by kernel objects or runtime services, not ordinary files that an agent may edit to grant itself permission. Sensitive context, register contents, audit records and resource information require explicit inspection rights. The design combines Plan 9-inspired resource interfaces with agent-oriented lifecycle management.
 
@@ -847,15 +834,20 @@ Track A is the primary engineering track. Track B may progress independently onc
 | Reflex and persistence | Bounded user-space reflexes, audit/replay, persistent storage and agent recovery (v0.5–v0.6). Evaluate AMD64/KVM guest conformance separately. | Policy tooling, replay harness, management UI and hosted recovery experiments |
 | Standalone and expansion | Native networking, remote MCP, assurance, ARM64 and expanded AMD64 support (v0.7+) | Enterprise integrations, fleet management, Clavenar Guard and managed services |
 
-```text
-Track A (primary):   RV64 kernel -> isolated OS -> secure core -> agent core
-                         -> agentic MVP -> reflexes -> persistence -> native networking
-                                    ^
-                                    | shared contracts, tools and restricted host bridge
-                                    v
-Track B (parallel):  SDK -> Linux-hosted runtime -> inference/MCP -> workflows
-                         -> developer tooling -> enterprise integrations
+```mermaid
+flowchart TB
+    accTitle: Native and Hosted development tracks
+    accDescr: The primary Native track runs from the RV64 kernel to native networking. The parallel ecosystem track runs from the SDK to enterprise integrations. They share contracts, tools and a restricted host bridge.
+    Shared["Shared contracts and tools<br/>Restricted host bridge"]
+    Shared -.- Native(["Track A · Native OS (primary)"])
+    Shared -.- Hosted(["Track B · Agent ecosystem (parallel)"])
+    Native --> Kernel["RV64 kernel"] --> Isolated["Isolated OS"] --> Secure["Secure core"] --> Agents["Agent core"]
+    Agents --> MVP["Agentic MVP"] --> Reflexes["Reflexes"] --> Storage["Persistence"] --> Network["Native networking"]
+    Hosted --> SDK["SDK"] --> Runtime["Linux-hosted runtime"] --> Brokers["Inference and MCP"]
+    Brokers --> Workflows["Workflows"] --> Tooling["Developer tooling"] --> Enterprise["Enterprise integrations"]
 ```
+
+**Figure 23.3.** Arrows show the order within each track. Dotted lines connect the components they share.
 
 Share agent definition schemas, tool contracts, goal and budget semantics, policy test vectors, event formats and SDK APIs. The native and hosted backends can have different enforcement mechanisms; document actual guarantees and run conformance tests on both. Track B can validate demand before Track A is production-ready, but must not replace it or become an architectural prerequisite for the native kernel.
 
@@ -1122,13 +1114,19 @@ Proposed control interface: `reflex_install`, `reflex_attach`, `reflex_enable`, 
 
 ### 28.4 Learning into reflexes
 
-```text
-Cognitive agent proposes policy -> authorized policy manager
-    -> compile restricted bytecode -> verify and install
-    -> kernel/event service evaluates on relevant event
-    -> authorized helper acts -> audit and outcome
-    -> unexpected event escalates to cognitive agent
+```mermaid
+flowchart TB
+    accTitle: From proposed policy to a running reflex
+    accDescr: A cognitive agent proposes a policy to the authorized manager. Restricted bytecode is compiled, verified and installed. An event can trigger an authorized helper or escalate to the cognitive agent.
+    Agent["Cognitive agent proposes a policy"] --> Manager["Authorized policy manager"]
+    Manager --> Compile["Compile restricted bytecode"] --> Install["Verify and install"]
+    Install --> Eval["Kernel or event service evaluates a relevant event"]
+    Eval -->|policy matches| Helper["Authorized helper acts"]
+    Helper --> Audit["Record the outcome in the audit"]
+    Eval -->|unexpected event| Escalate["Escalate to the cognitive agent"]
 ```
+
+**Figure 28.4.** A verified reflex handles a matching event. An unexpected event goes to the cognitive agent for review.
 
 This allows intelligence to propose new operational behavior without making intelligence part of the security boundary. Test policies in shadow/simulation mode before activation. A changed policy requires review according to its authority; agents cannot grant themselves new helpers. Compare inference calls saved, p50/p99 latency, energy on hardware, event throughput, verifier assurance and policy complexity against Linux with eBPF plus a user-space agent runtime. All performance advantages remain hypotheses.
 
@@ -1201,12 +1199,19 @@ Protocol versions and optional extensions evolve. Negotiate supported features; 
 
 ### 30.1 Clavenar Guard and the MCP broker
 
-```text
-Agent / external client -> authenticated MCP gateway (mcpd)
-   -> policy and schema validation -> budget reservation
-   -> authorized local execution or restricted remote transport
-   -> response validation, accounting and audit
+```mermaid
+flowchart TB
+    accTitle: Authorization and dispatch of an MCP request
+    accDescr: An authenticated gateway checks policy and schema and reserves the budget before local execution or restricted remote transport. Both routes return through response validation, accounting and audit.
+    Caller["Agent or external client"] --> Gateway["Authenticated MCP gateway (mcpd)"]
+    Gateway --> Validate["Validate policy and schema"] --> Budget["Reserve budget"]
+    Budget --> Local["Authorized local execution"]
+    Budget --> Remote["Restricted remote transport"]
+    Local --> Result["Validate response, account for usage and audit"]
+    Remote --> Result
 ```
+
+**Figure 30.1.** Local and remote MCP calls pass through the same admission and accounting steps.
 
 The broker binds each invocation to its authenticated caller and authorized goal. It checks the server identity, registered tool version, scoped credential, arguments, expiry and permitted effect. For a local tool, its resource handlers enforce the allowed operations. For a remote tool, the guarantee also depends on the remote endpoint honoring the credential's scope and the agreed effect. Reject endpoints with unknown effects when a goal requires read-only execution. Negotiated MCP features describe what peers can speak. The broker determines what this caller may do.
 
@@ -1271,27 +1276,27 @@ All modes share logical goal, policy, agent-definition, capability, tool, event 
 
 ### 31.2 Control plane, execution plane and Linux enforcement
 
-```text
-CLI / SDK / Web UI / external agents
-                  |
-     Local Unix socket / authenticated REST / MCP
-                  |
-         clavenard (control plane)
-  goals, policy, identities, lifecycle, budgets,
-  workflows, approvals, registry, events, persistence
-                  |
-             execution plane
-   +--------------+---------------+---------------+
-   | sandbox      | modeld        | mcpd          |
-   | tool runner  | inference     | tool broker   |
-   | workspaces   | reflexd       | audit         |
-   +--------------+---------------+---------------+
-                  |
-   Linux processes, namespaces, cgroups v2, seccomp,
-   Landlock/LSMs, filesystem, sockets, pidfds, KVM
-                  |
-              physical hardware
+```mermaid
+flowchart TB
+    accTitle: Clavenar Hosted on Linux
+    accDescr: Clients reach the clavenard control plane through a Unix socket, authenticated REST or MCP. Its execution services use Linux enforcement mechanisms on the physical host.
+    Clients["CLI, SDK, web UI or external agents"] --> API["Local Unix socket, authenticated REST or MCP"]
+    API --> Control["clavenard · control plane<br/>Goals, policy, identities, lifecycle and budgets<br/>Workflows, approvals, registry, events and persistence"]
+    subgraph Plane["Execution plane"]
+        Work["Sandbox and tool runner<br/>Workspaces"]
+        Brokers["modeld · inference<br/>mcpd · tool broker"]
+        Events["reflexd<br/>Audit"]
+    end
+    Control --> Work
+    Control --> Brokers
+    Control --> Events
+    Work --> Linux["Linux processes, namespaces, cgroups v2 and seccomp<br/>Landlock/LSMs, filesystem, sockets, pidfds and KVM"]
+    Brokers --> Linux
+    Events --> Linux
+    Linux --> Hardware["Physical hardware"]
 ```
+
+**Figure 31.2.** In Hosted mode, `clavenard` manages goal policy and lifecycle. Linux enforces the restrictions on workloads and brokers.
 
 Begin with a modular control daemon (`clavenard`), not a fleet of microservices. Separate the privileged sandbox launcher, untrusted workloads, credentials and network-facing brokers into restricted processes when needed for security. The daemon authenticates users and service identities and manages goal state; the kernel enforces the actual process restrictions. A trusted broker, not an agent-supplied `goal_id`, identifies a caller using authenticated IPC and its assigned execution/session context.
 
@@ -1396,27 +1401,34 @@ Native v0.4 needs a working approval path for its reviewed guest changes and a d
 
 Clavenar Virtual is a way to deliver our own kernel without asking users to replace their host OS. Each VM runs Clavenar's native kernel, userland, capability system and agent runtime. The Linux host schedules the virtual CPUs and enforces the outer VM resource limits; the guest schedules its own processes and agents. A host-side control plane and service brokers manage the goal's outer authority and lifecycle.
 
-```text
-                         clavenard / SDK
-                                |
-                       Goal Machine Manager
-                                |
-      +-------------------------+-------------------------+
-      |                         |                         |
-  Goal VM A                 Goal VM B                 Goal VM C
-  Agent(s) + tools          Agent(s) + tools          Agent(s) + tools
-  Clavenar guest kernel     Clavenar guest kernel     Clavenar guest kernel
-      |                         |                         |
-  restricted VMM worker     restricted VMM worker     restricted VMM worker
-      +-------------------------+-------------------------+
-                                |
-                   Linux KVM / QEMU (as applicable)
-                                |
-                           host hardware
-
-  Each VM -> authenticated service channel -> host service brokers
-           -> inference / MCP / approval / artifacts / audit
+```mermaid
+flowchart TB
+    accTitle: Goal Machine management and compute isolation
+    accDescr: The SDK and clavenard use the Goal Machine Manager. Each of three example VMs runs its own Clavenar guest kernel, agents and tools with a separate restricted VMM worker on the host.
+    Client["clavenard / SDK"] --> Manager["Goal Machine Manager"]
+    Manager --> A["Goal VM A<br/>Agents and tools<br/>Clavenar guest kernel"]
+    Manager --> B["Goal VM B<br/>Agents and tools<br/>Clavenar guest kernel"]
+    Manager --> C["Goal VM C<br/>Agents and tools<br/>Clavenar guest kernel"]
+    A --> WA["Restricted VMM worker A"]
+    B --> WB["Restricted VMM worker B"]
+    C --> WC["Restricted VMM worker C"]
+    WA --> Backend["QEMU/TCG or a Linux/KVM backend"]
+    WB --> Backend
+    WC --> Backend
+    Backend --> HW["Host hardware"]
 ```
+
+**Figure 32.1a.** Each Goal Machine has a guest kernel and a dedicated VMM worker.
+
+```mermaid
+flowchart LR
+    accTitle: Mediated services for each Goal Machine
+    accDescr: Each VM has an authenticated service channel to host brokers for inference, MCP, approval, artifacts and audit.
+    VM["Each Goal VM"] --> Channel["Authenticated<br/>service channel"]
+    Channel --> Brokers["Host service brokers<br/>Inference · MCP · approval<br/>Artifacts · audit"]
+```
+
+**Figure 32.1b.** Each VM reaches its authorized services through an authenticated channel to the host brokers.
 
 The system can eventually operate in three VM isolation modes: one VM for cooperating agents in a trust domain; one VM per independent agent; or one VM per goal with multiple agents and conventional tools inside it. The last is the recommended first commercial product hypothesis: a disposable **Goal Machine**. Guest-level protection limits what processes inside a machine can do; outer virtualization isolates separate machines. A machine may outlive an individual process or inference request, but its authority is tied to a bounded goal lease. A Goal Machine initially executes Clavenar-native tools and mediated services, not arbitrary Linux ELF binaries, full Python environments or existing Linux compilers. Use a Linux sandbox/microVM backend where a workload requires these dependencies; disclose which guest kernel is executing it.
 
@@ -1565,15 +1577,16 @@ The early AMD64 port should target a deliberately small virtual machine profile 
 
 Yes, on a suitable Linux/KVM host running a compatible guest architecture. KVM is the Linux kernel's hardware virtualization facility, exposed via `/dev/kvm`. It does not, by itself, provide the complete userspace machine model, boot loader, device backends or lifecycle manager needed by a guest. QEMU is one VMM; Firecracker and Cloud Hypervisor are other examples of VMMs that can use KVM without QEMU. Our own Rust process could do so as well.
 
-```text
-Clavenar OS guest
-        |
-Clavenar VMM (Rust userspace: vCPU execution loop, boot, devices)
-        |
-/dev/kvm (Linux kernel)
-        |
-AMD64 VT-x / AMD-V hardware
+```mermaid
+flowchart TB
+    accTitle: Proposed direct-KVM backend on AMD64
+    accDescr: The Clavenar guest runs under a Rust userspace VMM that handles boot, devices and the vCPU loop. The VMM uses Linux /dev/kvm and AMD64 hardware virtualization.
+    Guest["Clavenar OS guest"] --> VMM["Clavenar VMM in Rust userspace<br/>vCPU execution loop, boot and devices"]
+    VMM --> KVM["/dev/kvm · Linux kernel"]
+    KVM --> Hardware["AMD64 hardware virtualization<br/>Intel VT-x or AMD-V"]
 ```
+
+**Figure 33.2.** The optional Clavenar VMM supplies the userspace machine model. Linux KVM provides hardware-assisted virtualization.
 
 The term **Clavenar VMM** denotes this optional native-host VMM, not the agent runtime, VM manager or a replacement for KVM. Removing QEMU does not remove Linux from the virtualization host; nor does it give us cross-architecture emulation. Continue using QEMU TCG for RV64 on AMD64 hosts. Keep QEMU/KVM as the first commercial virtualization backend so that custom VMM work does not delay Goal Machines.
 
@@ -1652,12 +1665,25 @@ Reference starting points (verify current API versions and platform requirements
 
 External LLM providers generally expose HTTPS APIs. MCP's local stdio transport does not require networking; remote MCP and cloud inference do require networking somewhere, but that does not have to be in the guest. Preserve one provider-independent `modeld` contract across deployment modes.
 
-| Mode | Inference route | Guest TCP/IP required? |
-|---|---|---|
-| Hosted | Linux modeld -> provider HTTPS or local engine | Not applicable; Linux supplies networking |
-| Virtual, mediated | Guest modeld -> authenticated virtual service channel -> host modeld -> provider HTTPS | No |
-| Native standalone | Guest/native modeld -> native HTTP/TLS and TCP/IP -> provider HTTPS | Yes for conventional remote HTTPS access |
-| Local inference | Native or hosted modeld -> local model engine | No Internet required for inference |
+```mermaid
+flowchart LR
+    accTitle: Inference routes by deployment mode
+    accDescr: Hosted modeld can use a provider or local engine. A mediated guest calls host modeld over an authenticated channel. Standalone remote inference uses the native network stack. Native and Hosted can also use a local model engine.
+    Virtual["Virtual (mediated)<br/>Guest modeld"] -->|authenticated<br/>service channel| Host["Host modeld"]
+    Host --> Provider["Provider HTTPS API"]
+    Native["Native standalone<br/>Native modeld"] --> Stack["Native HTTP/TLS<br/>and TCP/IP"] --> Provider
+    Hosted["Hosted remote inference<br/>Linux modeld"] --> Provider
+    Local["Local inference<br/>Native or hosted modeld"] --> Engine["Local model engine"]
+```
+
+**Figure 34.1.** A mediated guest sends inference requests through the host broker. A standalone guest can contact the provider using its own network stack.
+
+| Mode | Networking required for inference |
+|---|---|
+| Hosted | Linux supplies networking for remote providers. |
+| Virtual, mediated | The host supplies TCP/IP. The guest uses the service channel. |
+| Native standalone | The guest needs TCP/IP for a remote HTTPS provider. |
+| Local inference | A local engine can run offline. |
 
 Implement a deterministic mock first. Next, implement real provider adapters in the hosted broker. Reuse those adapters for virtual guest requests rather than maintaining separate provider-specific guest protocols. Port or adapt the service to native user space once the networking and runtime dependencies exist. A commercial no-NIC Goal Machine can retain the mediated transport even after the standalone release. The model API, credential provider and actual inference engine remain replaceable.
 
@@ -1698,32 +1724,25 @@ Native agents should ordinarily use `modeld` and `mcpd` rather than receiving ra
 
 In the proposed Native architecture the kernel binds local execution contexts and handles to authenticated identities and goals. The runtime pins the agent definition hash and interprets its instructions. Hosted and Native can use the same definition when the backend supports its dependencies and required guarantees. The runtime verifies package identity and requests authority from the trusted authorizer.
 
-```text
-/etc/clavenar/agents/diagnostics/
-  agent.toml
-  INSTRUCTIONS.md
-  PERSONALITY.md
-  CONSTRAINTS.md
-  skills/
-    log-analysis.md
-    memory-diagnostics.md
-  workflows/
-    diagnose.yaml
-  policies/
-    capabilities.toml
-    network.toml
-    approvals.toml
-  tools/
-    native.toml
-    mcp.toml
-  reflexes/
-    failure-monitor.yaml
-  tests/
-    scenarios.yaml
-
-/var/lib/clavenar/agents/diagnostics/
-  state/  memory/  checkpoints/  history/  metrics/  audit/
+```mermaid
+flowchart LR
+    accTitle: Definition and runtime directories for the diagnostics agent
+    accDescr: The reviewed package under /etc contains the manifest, instructions and supporting files. Writable agent state, memory, checkpoints, history, metrics and audit live under /var/lib.
+    Definition["/etc/clavenar/agents/diagnostics/"] --- Files["agent.toml · INSTRUCTIONS.md<br/>PERSONALITY.md · CONSTRAINTS.md"]
+    Definition --- Dirs["skills/ · workflows/ · policies/<br/>tools/ · reflexes/ · tests/"]
+    Runtime["/var/lib/clavenar/agents/diagnostics/"] --- Data["state/ · memory/ · checkpoints/<br/>history/ · metrics/ · audit/"]
 ```
+
+**Figure 35.** The diagnostics agent has a reviewed definition under `/etc/clavenar/agents/diagnostics/` and writable runtime data under `/var/lib/clavenar/agents/diagnostics/`. The definition includes these example files.
+
+| Package directory | Files |
+|---|---|
+| `skills/` | `log-analysis.md`, `memory-diagnostics.md` |
+| `workflows/` | `diagnose.yaml` |
+| `policies/` | `capabilities.toml`, `network.toml`, `approvals.toml` |
+| `tools/` | `native.toml`, `mcp.toml` |
+| `reflexes/` | `failure-monitor.yaml` |
+| `tests/` | `scenarios.yaml` |
 
 Separate immutable reviewed instructions and manifests from writable memories and runtime state. Retain provenance, package versions, skill hashes and the policy version used by each goal. Agent memory, remote tool output, MCP resources and external documents are untrusted context rather than higher-priority instructions.
 

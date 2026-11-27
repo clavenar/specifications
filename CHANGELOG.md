@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.13 replaces text diagrams with Mermaid figures for goal
+  supervision, resource layouts, development tracks, reflex and MCP execution,
+  Hosted services, Goal Machines and inference routes.
 - Architecture draft 0.12 records kernel 0.0.35 at `f0b1003` and the QEMU
   checks repeated on 0.0.36. It corrects the default RamFS authority, retains
   the historical 0.0.1 baseline and links evidence for the six native v0.4 scenarios.
