@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Architecture draft 0.24 records guest-only rename restrictions and staging
+  audit entries that omit the requested name on kernel 0.1.9 and `clv-abi`
+  0.0.23. [Core at `abd4b08`](https://github.com/clavenar/core/tree/abd4b0851bff361d61b84d2ca3847003e1478b0d)
+- Repository layout 0.14 locates the admission, staging and commit
+  checks and the shared audit record.
 - Architecture draft 0.23 records serial write denial, restricted exit
   and fault logs and trusted shell replies for guest-only goals on
   kernel 0.1.8. [Core at `53813fc`](https://github.com/clavenar/core/tree/53813fcdce6b0a4daacb88f6acbad1170cb677bf)

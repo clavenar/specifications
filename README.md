@@ -2,9 +2,9 @@
 
 This repository publishes the Clavenar architecture and engineering layout.
 
-- [Architecture and vision, draft 0.23](architecture/architecture-and-vision.md) defines the goals, security model and release criteria.
-- [Verified RV64 baseline](architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline) and [MVP scenario status](architecture/architecture-and-vision.md#241-demonstration-scenario) give reproducible QEMU examples for kernel 0.1.8, including reviewed publication, recovery, native MCP over a Linux route and guest-only policy checks for protected RamFS input and serial output.
-- [Repository layout, revision 0.13](engineering/repository-layout.md) locates the current native implementation and maps the planned components.
+- [Architecture and vision, draft 0.24](architecture/architecture-and-vision.md) defines the goals, security model and release criteria.
+- [Verified RV64 baseline](architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline) and [MVP scenario status](architecture/architecture-and-vision.md#241-demonstration-scenario) give reproducible QEMU examples for kernel 0.1.9, including reviewed publication, recovery, native MCP over a Linux route and guest-only checks for protected RamFS reads, direct serial writes and rename publication.
+- [Repository layout, revision 0.14](engineering/repository-layout.md) locates the current native implementation and maps the planned components.
 - [Changelog](CHANGELOG.md) records document revisions.
 
 The `security/`, `standards/` and `adr/` directories are reserved for
