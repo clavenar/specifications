@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.29 records protected completion details on
+  kernel 0.1.14 and `clv-abi` 0.0.27. [Core at `f1b3540`](https://github.com/clavenar/core/tree/f1b3540fb042c8ef19598c0470f2e06eead0f803)
+- Repository layout 0.19 locates the wait flag and status redaction.
 - Architecture draft 0.28 records guest-only tool stream admission and
   stdout checks on kernel 0.1.13 and `clv-abi` 0.0.26. [Core at `95e1eb5`](https://github.com/clavenar/core/tree/95e1eb572dc1ee20a7a6f957e7bf3849fd0067ca)
 - Repository layout 0.18 locates the admission, pipe read and audit checks.
