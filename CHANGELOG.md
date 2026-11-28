@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.16 records the goal-authorized native MCP search on
+  kernel 0.1.1 and `clv-abi` 0.0.19. It describes the fixed endpoint and remaining Phase 15 work. [Core at `42da788`](https://github.com/clavenar/core/tree/42da7882d096a969fb1c69c215fa6403e29e7bb6)
+- Repository layout 0.6 locates the QEMU network fixtures and the native MCP client.
 - Architecture draft 0.15 uses kernel 0.0.99 and `clv-abi` 0.0.17. It records goal-authorized HTTPS and native MCP discovery, and identifies remote tool invocation as remaining phase 15 work. [Core at `46eaeb5`](https://github.com/clavenar/core/tree/46eaeb591c0957c40e0140c1e3cafad35d6eeb62)
 - Repository layout 0.5 records the native HTTP and TLS sources and uses the pinned Rust 1.100.1 toolchain in the RV64 build instructions.
 - Architecture draft 0.14 records kernel 0.0.93 and `clv-abi` 0.0.14 at
