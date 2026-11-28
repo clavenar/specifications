@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Architecture draft 0.15 uses kernel 0.0.99 and `clv-abi` 0.0.17. It records goal-authorized HTTPS and native MCP discovery, and identifies remote tool invocation as remaining phase 15 work. [Core at `46eaeb5`](https://github.com/clavenar/core/tree/46eaeb591c0957c40e0140c1e3cafad35d6eeb62)
+- Repository layout 0.5 records the native HTTP and TLS sources and uses the pinned Rust 1.100.1 toolchain in the RV64 build instructions.
 - Architecture draft 0.14 records kernel 0.0.93 and `clv-abi` 0.0.14 at
   Core `9559b5b`. It updates the six MVP scenarios, checkpoint recovery,
   host-brokered Ollama and MCP, and the phase 15 networking work.
