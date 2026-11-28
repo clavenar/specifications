@@ -2,10 +2,10 @@
 
 This repository publishes the Clavenar architecture and engineering layout.
 
-- [Architecture and vision, draft 0.38](architecture/architecture-and-vision.md) defines the goals, security model and release criteria.
-- [Verified RV64 baseline](architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline) and [MVP scenario status](architecture/architecture-and-vision.md#241-demonstration-scenario) give reproducible QEMU examples for kernel 0.1.23, including reviewed publication, recovery, native MCP over a Linux route, shell-only UART input, silent guest-only RamFS entry and explicit display, confined tool streams and explicit collection of protected replies and completion details, and a bounded egress denial audit.
-- The QEMU suite checks guest-only shell behavior, publication denials for restricted goals and protected files, rename recovery, host-plan denial, and protection across local checkpoint recovery. It also checks that a denied host checkpoint launch writes no pending record and creates no broker request. [QEMU shell checks](https://github.com/clavenar/core/blob/f84cf5a5965bc6f5c79fff805c1b5b46635bd085/README.md#test-the-guest-only-shell-in-qemu)
-- [Repository layout, revision 0.28](engineering/repository-layout.md) locates the current native implementation and maps the planned components.
+- [Architecture and vision, draft 0.39](architecture/architecture-and-vision.md) defines the goals, security model and release criteria.
+- [Verified RV64 baseline](architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline) and [MVP scenario status](architecture/architecture-and-vision.md#241-demonstration-scenario) give reproducible QEMU examples for kernel 0.1.24, including reviewed publication, recovery, native MCP over a Linux route, shell-only UART input, silent guest-only RamFS entry and explicit display, confined tool streams and explicit collection of protected replies and completion details, and a bounded egress denial audit.
+- The QEMU suite checks guest-only shell behavior, publication denials for restricted goals and protected files, rename recovery, host-plan and host-tool denial, and protection across local checkpoint recovery. It also checks that a denied host checkpoint launch writes no pending record and creates no broker request. [QEMU shell checks](https://github.com/clavenar/core/blob/b7cb639ba84cefde3fe07504a0b0e162492de234/README.md#test-the-guest-only-shell-in-qemu)
+- [Repository layout, revision 0.29](engineering/repository-layout.md) locates the current native implementation and maps the planned components.
 - [Changelog](CHANGELOG.md) records document revisions.
 
 The `security/`, `standards/` and `adr/` directories are reserved for

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.39 records the direct host-tool denial regression on
+  kernel 0.1.24 and `clv-abi` 0.0.29. [Core at `b7cb639`](https://github.com/clavenar/core/tree/b7cb639ba84cefde3fe07504a0b0e162492de234)
+- Repository layout 0.29 describes the direct host-tool checks.
 - Architecture draft 0.38 records the protected-file publication regression on
   kernel 0.1.23 and `clv-abi` 0.0.29. [Core at `f84cf5a`](https://github.com/clavenar/core/tree/f84cf5a5965bc6f5c79fff805c1b5b46635bd085)
 - Repository layout 0.28 describes the expanded rename checks.
