@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Architecture draft 0.17 records the static IPv4 and HTTPS profile and
+  the routed MCP walkthrough on kernel 0.1.2. [Core at `71559ef`](https://github.com/clavenar/core/tree/71559efde4b37721543d4a6fd1942eeaa1b26c48)
+- Repository layout 0.7 locates the network profile builder and the default
+  QEMU profile.
 - Architecture draft 0.16 records the goal-authorized native MCP search on
   kernel 0.1.1 and `clv-abi` 0.0.19. It describes the fixed endpoint and remaining Phase 15 work. [Core at `42da788`](https://github.com/clavenar/core/tree/42da7882d096a969fb1c69c215fa6403e29e7bb6)
 - Repository layout 0.6 locates the QEMU network fixtures and the native MCP client.
