@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Architecture draft 0.21 records guest-only goal egress and local
+  checkpoint recovery on kernel 0.1.6 and `clv-abi` 0.0.22. [Core at `156abc2`](https://github.com/clavenar/core/tree/156abc2cd40d504a0b896dfa4973df6824b14c08)
+- Repository layout 0.11 locates the native HTTPS and host-broker
+  admission checks and the checkpoint recovery path.
 - Architecture draft 0.20 records the Linux-routed MCP call and DNS, CA
   and transmit-budget denials on kernel 0.1.5. [Core at `cab3ff8`](https://github.com/clavenar/core/tree/cab3ff890f457dc91f0945c536c25dbae1055a35)
 - Repository layout 0.10 links the TAP walkthrough and the reuse of the
