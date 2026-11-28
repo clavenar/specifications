@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Architecture draft 0.14 records kernel 0.0.93 and `clv-abi` 0.0.14 at
+  Core `9559b5b`. It updates the six MVP scenarios, checkpoint recovery,
+  host-brokered Ollama and MCP, and the phase 15 networking work.
+- Repository layout 0.4 maps the QEMU broker, `netd` and the five native ELF
+  images. Both maintained documents and the archived target lists now specify
+  RV64 as the reference architecture and AMD64 as the planned second port.
+  Archived figure links point to the diagrams in the maintained architecture.
 - Architecture draft 0.13 replaces text diagrams with Mermaid figures for goal
   supervision, resource layouts, development tracks, reflex and MCP execution,
   Hosted services, Goal Machines and inference routes.

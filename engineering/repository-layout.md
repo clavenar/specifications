@@ -1,13 +1,13 @@
 # Clavenar — Repository Layout
 
-**Document revision:** 0.3\
-**Date:** 27 November 2026\
+**Document revision:** 0.4\
+**Date:** 28 November 2026\
 **Organization:** `clavenar`  
 **Primary repository:** `clavenar/core`  
 **Website:** `clavenar.io`  
 **Related document:** [Clavenar — Architecture and Vision](../architecture/architecture-and-vision.md)
 
-The current tree records kernel 0.0.36 (`cd78ad9`) on 27 November 2026, including the 0.0.35 read-scope implementation and the reorganized Core documentation. The target trees describe planned components. [Current Core tree](#21-current-core-tree)
+Section 2.1 records the sources for RV64 kernel 0.0.93 and `clv-abi` 0.0.14 at Core revision `9559b5b`. The target trees describe planned components. [Current Core tree](#21-current-core-tree) · [Build and boot](#131-build-and-boot-the-rv64-prototype)
 
 > One execution model, multiple deployment environments, a shared security contract.
 
@@ -21,7 +21,7 @@ Clavenar has three deployment modes. Native is the Rust kernel and userland shar
 
 Use a public engineering monorepo, `clavenar/core`, for the shared implementation. Keep the public specifications and website separate; split other repositories only when independent ownership, release cadence, distribution or access control warrants it.
 
-Native OS development is the primary engineering objective. The planned Hosted services supply model and tool brokers for the guest bridge and a Linux comparison baseline. Virtual targets AMD64 Goal Machines on existing Linux/KVM infrastructure.
+Native OS development is the primary engineering objective. A Python broker on the QEMU host handles the prototype’s model and MCP requests. The proposed Hosted runtime would execute agents on Linux. The planned AMD64 Virtual target would execute the native kernel on Linux/KVM.
 
 ### 1.1 GitHub organization
 
@@ -45,48 +45,57 @@ The first three repositories form the bootstrap. The remaining names are proposa
 
 ### 2.1 Current Core tree
 
-The build embeds four separately compiled user ELFs. The shell, `hello`, `echo` and `grep` each get a fixed task slot. These are the source and documentation entry points for the prototype. [Core at `cd78ad9`](https://github.com/clavenar/core/tree/cd78ad979fd882270cbcc3786a46306f18471ae9)
+The build embeds five user ELFs in seven fixed task slots. `echo` supplies the ordinary, supervisor and monitor slots. `netd` starts when a supported NIC initializes. The tree shows the source entry points for this revision. [Core at `9559b5b`](https://github.com/clavenar/core/tree/9559b5bd2e3ef99712e492d80406e53550a7db8b)
 
 ```text
 core/
-├── README.md                            # Build, boot and try a directory-scoped read
-├── ROADMAP.md                           # Native release gates and MVP status
+├── README.md                            # Prerequisites, kernel build and QEMU quickstart
+├── ROADMAP.md                           # Release gates and links to working examples
 ├── docs/
-│   ├── qemu-walkthroughs.md              # Guest commands and expected results
-│   └── native-syscall-abi.md             # RV64 registers, call semantics and wire formats
+│   ├── qemu-walkthroughs.md             # Host and guest commands with expected results
+│   └── native-syscall-abi.md            # RV64 registers, syscalls and wire formats
 ├── native/
 │   ├── kernel/
 │   │   ├── Cargo.toml
 │   │   ├── Cargo.lock
-│   │   ├── build.rs                      # Compile and embed the user ELFs
-│   │   ├── build/definition.rs           # Validate and pin mock agent definitions
+│   │   ├── build.rs                     # Compile and embed the user ELFs
+│   │   ├── build/definition.rs          # Validate and pin agent definitions
 │   │   └── src/
-│   │       ├── main.rs                   # Boot and scheduler setup
-│   │       ├── programs.rs               # Embedded program images and tool image hashes
-│   │       ├── arch/riscv64/              # Entry, traps and timer
-│   │       ├── drivers/uart.rs
-│   │       ├── memory/                    # Frames, Sv39, ELF loading and user copies
-│   │       ├── fs/ramfs.rs                # Paths, directories and file storage
-│   │       ├── fs/ramfs/                  # Handles, grants and staged renames
-│   │       ├── ipc.rs                     # Bounded typed messages
-│   │       ├── ipc/pipe.rs
-│   │       ├── scheduler.rs               # Task slots, launches, waits and events
-│   │       ├── scheduler/goal.rs          # Goal and agent lifetimes
-│   │       ├── scheduler/goal/            # Budgets, reads, delegation, rename review and audit
-│   │       └── syscall/mod.rs             # Native syscall dispatch
+│   │       ├── main.rs                  # Boot and scheduler setup
+│   │       ├── programs.rs              # Embedded images and tool identities
+│   │       ├── arch/riscv64/            # Entry, traps and timer
+│   │       ├── drivers/                 # UART, RTC and VirtIO MMIO devices
+│   │       │   └── virtio/              # Block, console, network and RNG drivers
+│   │       ├── memory/                  # Frames, Sv39, ELF loading and user copies
+│   │       ├── fs/ramfs.rs              # Paths, directories and file storage
+│   │       ├── fs/ramfs/                # Handles, staged renames and durable records
+│   │       ├── ipc.rs                   # Bounded typed messages
+│   │       ├── ipc/pipe.rs              # Native streams
+│   │       ├── host_bridge.rs           # Guest side of the restricted host channel
+│   │       ├── scheduler.rs             # Task slots, launches, waits and events
+│   │       ├── scheduler/goal.rs        # Goal and agent lifetimes
+│   │       ├── scheduler/goal/          # Budgets, grants, monitoring, review and checkpoints
+│   │       └── syscall/                 # Dispatch and network-service calls
 │   └── linker/riscv64.ld
-├── crates/clv-abi/src/                    # Syscall numbers, wire types and registries
+├── crates/clv-abi/src/                  # Shared syscall numbers, wire types and registries
+├── platforms/qemu-riscv64-virt/
+│   ├── host_bridge.py                   # QEMU launcher and SQLite request journal
+│   ├── bridge_protocol.py               # Guest–host wire messages
+│   ├── ollama_backend.py                # Loopback model calls
+│   ├── mcp_backend.py                   # Loopback MCP tool calls
+│   └── replay_backend.py                # Replay of recorded decisions and tool receipts
 └── userspace/
-    ├── user.ld                           # User ELF layout
-    ├── libclv/                           # RV64 syscall wrappers
-    ├── shell/                            # clsh commands, help and audit display
-    ├── hello/                            # Agent and ordinary child program
-    │   └── definitions/                  # Versioned find-greeting TOML definitions
-    ├── echo/
-    └── grep/                             # Native search program behind text.search@1
+    ├── user.ld                          # User ELF layout
+    ├── libclv/                          # RV64 syscall wrappers
+    ├── shell/                           # clsh commands, help and audit display
+    ├── hello/                           # Worker and local MCP client
+    │   └── definitions/                 # find-greeting revisions 1–8
+    ├── echo/                            # Ordinary child, supervisor and monitor
+    ├── grep/                            # Native search tool and stdio MCP server
+    └── netd/                            # smoltcp service and optional HTTP and TLS probes
 ```
 
-The `platforms/qemu-riscv64-virt/`, `tests/`, `xtask/` and `.github/workflows/` directories are reserved for future work. The checked-in QEMU walkthroughs give manual commands and expected results. [Walkthroughs](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md) · [Verified native baseline](../architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline)
+The QEMU platform contains the host broker and its backends. The top-level `tests/`, `xtask/` and `.github/workflows/` directories are placeholders. The walkthroughs give runnable fixtures and expected output. [QEMU walkthroughs](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md) · [RV64 baseline](../architecture/architecture-and-vision.md#21-rv64-prototype-and-verification-baseline)
 
 ### 2.2 Target Core tree
 
@@ -158,15 +167,14 @@ native/
 │       │   │   ├── context.rs
 │       │   │   ├── sv39.rs
 │       │   │   └── timer.rs
-│       │   ├── x86_64/
-│       │   │   ├── boot.rs
-│       │   │   ├── gdt.rs
-│       │   │   ├── idt.rs
-│       │   │   ├── apic.rs
-│       │   │   ├── paging.rs
-│       │   │   ├── context.rs
-│       │   │   └── syscall.rs
-│       │   └── aarch64/      # Later port
+│       │   └── x86_64/
+│       │       ├── boot.rs
+│       │       ├── gdt.rs
+│       │       ├── idt.rs
+│       │       ├── apic.rs
+│       │       ├── paging.rs
+│       │       ├── context.rs
+│       │       └── syscall.rs
 │       ├── memory/
 │       │   ├── frame.rs
 │       │   ├── allocator.rs
@@ -207,8 +215,7 @@ native/
 ├── bootloader/               # Own boot adapters, when needed
 └── linker/
     ├── riscv64.ld
-    ├── x86_64.ld
-    └── aarch64.ld
+    └── x86_64.ld
 ```
 
 ### 3.1 Kernel responsibilities
@@ -429,6 +436,8 @@ services/
 └── identityd/               # User and service identity
 ```
 
+The current native network service lives in `userspace/netd/`. The `services/` paths above show the intended shared-service layout. [Native network service](https://github.com/clavenar/core/tree/9559b5bd2e3ef99712e492d80406e53550a7db8b/userspace/netd)
+
 These are logical boundaries; deployment may consolidate implementations while isolating credentials and privileged operations. Hosted services may use mature Rust libraries and Linux networking. Native services use native syscalls/IPC and compatible libraries; do not assume Linux or Tokio-dependent binaries already run on Native. Virtual may run a guest front end and a trusted host back end of the same logical service. The shared `modeld` provider adapters and MCP gateways should not be rewritten for each environment.
 
 ## 8. Native userland, CLI and SDK
@@ -541,11 +550,8 @@ platforms/
 ├── qemu-x86_64-microvm/
 ├── kvm-x86_64/
 ├── firecracker-x86_64/
-├── qemu-aarch64-virt/
-├── firecracker-aarch64/
 └── hardware/
-    ├── riscv64/
-    └── aarch64/
+    └── riscv64/
 
 images/
 ├── manifests/
@@ -553,7 +559,7 @@ images/
 └── goal-machine/
 ```
 
-The prototype's boot syscall numbers and constants live in `crates/clv-abi/src/lib.rs`. The kernel dispatcher and native wrappers consume those definitions. The `protocols/` tree above is proposed for machine-readable schemas as interfaces become versioned. Core owns the canonical schema and any generated code. Specifications owns the normative semantics and identifies the Core revision they describe. Establish compatibility rules before declaring an interface stable.
+The prototype defines 78 native syscall numbers in `crates/clv-abi/src/lib.rs`. Other modules in the same crate define shared goal, audit, host-bridge and network records. The kernel dispatcher and user-space wrappers use these definitions. The planned `protocols/` tree holds machine-readable schemas. Core owns the schemas and generated code. Specifications defines their semantics and pins the matching Core revision. Specify compatibility rules before declaring an interface stable. [Syscall definitions](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/crates/clv-abi/src/lib.rs) · [Native syscall ABI](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/native-syscall-abi.md)
 
 Platform definitions are separate from CPU architecture implementations. They describe firmware, memory map, device discovery, transport, boot ABI, linker settings and image construction for a particular machine. RV64/OpenSBI under QEMU `virt` is the initial reference platform. Native AMD64 support is needed for efficient KVM guest execution on compatible Intel/AMD hosts. Support Firecracker and other VMMs only after their actual boot/device contracts have been implemented and tested.
 
@@ -681,7 +687,7 @@ specifications/
 
 An ADR (Architecture Decision Record) captures context, decision, alternatives, consequences and status. ADRs are append-only in spirit; supersede prior decisions explicitly when the architecture changes.
 
-Edit the live Markdown in `architecture/` and `engineering/`. The original drafts are preserved in [the import archive](../archive/imported-drafts/). The architecture document embeds its Mermaid figures in Markdown. Store separately maintained figure assets under `assets/diagrams/`.
+Edit the maintained Markdown in `architecture/` and `engineering/`. The archive retains the historical draft versions with the current CPU target scope. Git history preserves the original imports. Architecture flow diagrams are embedded in Markdown, and the virtual filesystem namespace uses a text tree. Store separate figure assets in `assets/diagrams/`. [Imported drafts](../archive/imported-drafts/)
 
 The PDF publishing toolchain is planned. Its template should carry the intended typography, teal palette, cover, contents and running headers. A document release should identify the source commit, rendering configuration and figure dependencies so the published artifact can be reproduced. Architecture and repository layout each use their own document revision.
 
@@ -689,18 +695,18 @@ The PDF publishing toolchain is planned. Its template should carry the intended 
 
 ### 13.1 Build and boot the RV64 prototype
 
-From the Core repository root, build the RV64 kernel with the checked-in manifest and lockfile. The commands below were verified with kernel 0.0.36 on QEMU `virt` and OpenSBI. Install stable Rust and the `riscv64gc-unknown-none-elf` target first. [Prerequisites and quickstart](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/README.md#build-and-run-the-rv64-kernel)
+From the Core repository root at `9559b5b`, build kernel 0.0.93 using stable Rust and the `riscv64gc-unknown-none-elf` target. The command below boots the default image on QEMU `virt` with OpenSBI and the NIC disabled. [Prerequisites and quickstart](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/README.md#build-and-run-the-rv64-kernel)
 
 ```sh
 cargo +stable rustc --locked --manifest-path native/kernel/Cargo.toml \
   --target riscv64gc-unknown-none-elf --target-dir target --release \
   -- -C "link-arg=-T${PWD}/native/linker/riscv64.ld" -C link-arg=--no-relax
 
-qemu-system-riscv64 -machine virt -smp 1 -m 128M -bios default -nographic \
+qemu-system-riscv64 -machine virt -smp 1 -m 128M -bios default -nographic -nic none \
   -kernel target/riscv64gc-unknown-none-elf/release/clavenar-kernel
 ```
 
-The serial console prints the kernel package version, four loaded ELF entries and `Sv39 paging enabled`. Type `help` at the `clsh>` prompt for shell commands. Press `Ctrl+a`, then `x`, to quit QEMU.
+The serial console prints the kernel package version, five loaded ELF entries and `Sv39 paging enabled`. Type `help` at the `clsh>` prompt for shell commands. Press `Ctrl+a`, then `x`, to quit QEMU.
 
 ### 13.2 Planned tooling and releases
 
@@ -727,7 +733,6 @@ just benchmark
 | `rust.yml` | Formatting, Clippy, host unit tests and core dependency checks |
 | `riscv64.yml` | Cross-compile RV64, boot QEMU and run kernel/userland tests |
 | `x86_64.yml` | AMD64 cross-build, boot and guest conformance |
-| `aarch64.yml` | Later ARM64 validation |
 | `hosted.yml` | Linux integration and sandbox tests |
 | `virtual.yml` | QEMU, host bridge, KVM and VM teardown tests |
 | `security.yml` | Adversarial and cross-backend policy conformance |
@@ -746,17 +751,17 @@ clavenar-riscv64-0.5.0.elf
 clavenar-x86_64-0.5.0.img
 clavenar-hosted-0.4.0-linux-x86_64.tar.gz
 clavenar-virtual-0.5.0-linux-x86_64.tar.gz
-clavenar-architecture-and-vision-0.12.pdf
-clavenar-repository-layout-0.3.md
+clavenar-architecture-and-vision-0.14.pdf
+clavenar-repository-layout-0.4.md
 ```
 
 These names describe future artifact conventions, not delivered software. Publish a tagged source revision, build/run instructions, supported-platform/ABI declarations, acceptance-test results, known limitations, checksums and, when supported, signatures and dependency/SBOM information. Use Apache 2.0 as the proposed Core license, subject to dependency and governance review. Keep essential enforcement, core audit primitives and conformance tests in the public foundation; do not rely on commercial extensions to make the open-source kernel secure. Keep commercial infrastructure and operational secrets outside public repos.
 
 ## 14. Day-one bootstrap
 
-The native prototype grew from RV64 boot and per-task RamFS handles to typed IPC, goal supervision, byte budgets and a reviewed rename. The current kernel work lives in `native/kernel/src/scheduler/`, `native/kernel/src/fs/`, `crates/clv-abi/` and the corresponding user programs. Section 2.1 maps those paths. [Current Core tree](#21-current-core-tree)
+For a new checkout, build the default RV64 image and run a goal with a read-only file grant. The QEMU walkthroughs then cover reviewed publication, checkpoint recovery, host-brokered model and MCP calls, and a private native network link. [Build and boot](#131-build-and-boot-the-rv64-prototype) · [Current Core tree](#21-current-core-tree)
 
-Architecture Section 23 defines all native, Hosted and Virtual release gates. Section 24 records the file-organizer checks that run in QEMU and the host services still needed for native v0.4. [Native release milestones](../architecture/architecture-and-vision.md#232-native-os-release-milestones) · [Cross-product release gates](../architecture/architecture-and-vision.md#234-cross-product-release-gates) · [MVP evidence](../architecture/architecture-and-vision.md#241-demonstration-scenario)
+Architecture Section 23 defines the native, Hosted and Virtual release gates. Section 24 maps the six file-organizer scenarios to current evidence. [Native release milestones](../architecture/architecture-and-vision.md#232-native-os-release-milestones) · [Cross-product release gates](../architecture/architecture-and-vision.md#234-cross-product-release-gates) · [MVP evidence](../architecture/architecture-and-vision.md#241-demonstration-scenario)
 
 ## 15. Engineering rules
 
@@ -767,7 +772,7 @@ Architecture Section 23 defines all native, Hosted and Virtual release gates. Se
 5. Use explicit effect restrictions, goal contracts, independent verification and staged publication where supported.
 6. No backend silently weakens mandatory security requirements. Record unsupported capabilities and fail closed.
 7. Virtual always executes the actual native kernel; Hosted does not substitute for native milestones.
-8. Build the minimal RV64 foundation first. Bring AMD64 forward for hardware-accelerated Goal Machines; ARM64 and a custom VMM are later, conditional work.
+8. Build the minimal RV64 foundation first. Target AMD64 for hardware-accelerated Goal Machines. Evaluate a custom VMM after measuring the QEMU/KVM deployment.
 9. Maintain one authoritative source for each schema, specification and implementation; keep versions pinned across repositories.
 10. Prefer small, reproducible deliverables and security tests to premature crate proliferation or a large set of empty repositories.
 

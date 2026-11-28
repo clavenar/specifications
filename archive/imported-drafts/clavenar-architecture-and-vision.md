@@ -1,10 +1,13 @@
 # Clavenar OS — Architecture and Vision
 ## Infrastructure for autonomous intelligence
 
+Historical import. [Maintained architecture and roadmap](../../architecture/architecture-and-vision.md)
+
 **Architecture and vision — revised draft 0.9 — 24 November 2026**  
 **Project name:** Clavenar OS  
 **Umbrella brand:** Clavenar — clavenar.io  
-**Platforms:** RV64 reference; AMD64 prioritized for hardware-accelerated Goal Machines; ARM64 later; Linux-hosted runtime and virtual deployment planned  
+**Native CPU targets.** RV64 on QEMU `virt` is the reference. AMD64 is planned for hardware-accelerated Goal Machines.
+
 **Status:** Proposed architecture building on an educational Rust/RV64 kernel. The earlier kernel, RAM filesystem and shell are source-level prototypes, not verified production implementations. The agent-native mechanisms described here are design goals, not existing capabilities.
 
 > Intelligence is untrusted. Authority is explicit. Autonomy is bounded. State is reversible where possible. Execution is accountable.
@@ -17,7 +20,7 @@ A conventional OS manages processes, memory, files, devices and CPU time. Claven
 
 The central research question is whether a clean-slate operating system can provide these guarantees more consistently, with a smaller auditable security boundary and less integration complexity, than an equivalently hardened Linux-hosted agent runtime.
 
-The initial target is QEMU's RV64 `virt` machine with OpenSBI. The native kernel will be designed for architecture portability. Begin the AMD64 port during v0.3, and target a working KVM-accelerated guest at v0.5; ARM64 follows when justified. The native kernel and bootable OS are the primary engineering deliverables from the outset. A Linux-hosted implementation of the same agent API is a separate, complementary adoption, experimentation and commercialization track; it is not a prerequisite for releasing the native OS. Clavenar Virtual runs that same native kernel as a VM guest, initially using QEMU and then hardware-accelerated KVM on compatible hosts. Disposable, goal-scoped VMs (Goal Machines) are the proposed initial commercial native deployment. A dedicated Rust VMM using KVM directly is an optional later optimization, not a prerequisite. Real hardware, embedded autonomous devices, robotics and hardware/software co-design are later targets.
+The initial target is QEMU's RV64 `virt` machine with OpenSBI. The native kernel will be designed for architecture portability. Begin the AMD64 port during v0.3, and target a working KVM-accelerated guest at v0.5. The native kernel and bootable OS are the primary engineering deliverables from the outset. A Linux-hosted implementation of the same agent API is a separate, complementary adoption, experimentation and commercialization track; it is not a prerequisite for releasing the native OS. Clavenar Virtual runs that same native kernel as a VM guest, initially using QEMU and then hardware-accelerated KVM on compatible hosts. Disposable, goal-scoped VMs (Goal Machines) are the proposed initial commercial native deployment. A dedicated Rust VMM using KVM directly is an optional later optimization, not a prerequisite. Real hardware, embedded autonomous devices, robotics and hardware/software co-design are later targets.
 
 Clavenar is not an agent-only OS. Conventional tools, services and native applications are essential; agents use these deterministic components to perform work efficiently. Three complementary execution models define the platform: imperative programs, goal-driven agents, and verified reactive policies (Agentic Reflex Architecture). MCP is a core user-space interoperability standard, not a privileged protocol or security boundary. Agent definitions combine detailed instructions, skills, workflows, requested capabilities, budgets and lifecycle settings.
 
@@ -73,7 +76,7 @@ An agent is not necessarily a single process. An agent identity may be associate
 
 ## 4. System architecture
 
-![Clavenar system architecture. User space contains the human interface, applications and isolated autonomous agents, the agent runtime, trusted services, and the system-call and typed-IPC boundary. Below the trust boundary, kernel space contains the Clavenar kernel, followed by platform firmware and the reference and target platforms.](clavenar_system_architecture_diagram.png){ width=100% }
+[System architecture diagram in the maintained architecture](../../architecture/architecture-and-vision.md#4-system-architecture)
 
 **Figure 4.** High-level layered view of the Clavenar architecture across user space, the trust boundary and kernel space.
 
@@ -241,7 +244,7 @@ Explicitly cancelling a goal should propagate cancellation to its children, revo
 
 ### 6.3 Lifecycle
 
-![Goal lifecycle diagram showing the main states Created, Ready, Running, and Completed/Failed/Cancelled, with transient states Waiting for model, Waiting for event, Waiting for approval, Suspended, and Checkpoint.](clavenar_lifecycle_diagram.png)
+[Goal lifecycle diagram in the maintained architecture](../../architecture/architecture-and-vision.md#63-lifecycle)
 
 **Figure 6.3.** Goal and agent lifecycle with transient waiting states and safe-point checkpointing.
 
@@ -382,7 +385,7 @@ A response is untrusted data, never executable authority. Parse a strict structu
 
 A distinguishing user-facing feature is the ability to inspect and undo an agent's changes. Build on the hierarchical RamFS and eventually a persistent copy-on-write filesystem.
 
-![Transactional autonomy diagram showing the flow from stable filesystem state to a private snapshot or overlay, then authorized agent operations, followed by diff inspection and validation, and finally a branch to either Commit or Discard.](clavenar_transaction_diagram.png)
+[Transactional publication diagram in the maintained architecture](../../architecture/architecture-and-vision.md#12-transactional-autonomy-and-versioned-filesystem)
 
 **Figure 12.** Transactional execution flow for goal-scoped private state and publication or discard.
 
@@ -529,7 +532,7 @@ A conservative initial implementation can label an entire agent or goal as sensi
 
 Agents may misinterpret a goal or be manipulated by malicious instructions embedded in files, webpages, messages or model outputs. The system should remain safe even when a model proposes an unauthorized operation.
 
-![Approval and prompt-injection containment diagram showing the flow from untrusted content to a model proposal, then to a typed tool request, followed by policy validation and the outcomes Allow, Deny, or Request approval.](clavenar_approval_diagram.png)
+[Approval flow diagram in the maintained architecture](../../architecture/architecture-and-vision.md#16-human-approval-and-prompt-injection-containment)
 
 **Figure 16.** Validation and authorization flow for untrusted model-proposed operations.
 
@@ -709,7 +712,7 @@ Sv39 is an RV64 virtual-memory scheme with 39-bit canonical virtual addresses, t
 clavenar/
 |-- Cargo.toml             workspace
 |-- kernel/
-|   |-- arch/              riscv64, x86_64, aarch64 (planned ports)
+|   |-- arch/              riscv64 reference, x86_64 planned
 |   |-- hal/               architecture-neutral contracts
 |   |-- mm/                frames, page tables, usercopy
 |   |-- sched/             timers, scheduling, accounting
@@ -779,7 +782,7 @@ This is the master delivery roadmap for Clavenar OS, not just for the agent runt
 | 14 | Durable agent checkpoints and restartable services | Recovery without duplicate external actions |
 | 15 | VirtIO-net, smoltcp, HTTP/TLS and native remote MCP | Authorized HTTPS requests; no network bypass |
 | 16 | Information-flow controls and stronger assurance | Restricted egress and adversarial tests |
-| 17 | ARM64 port, expanded AMD64 deployment and platform assurance | Same logical ABI and policy conformance tests across supported architectures |
+| 17 | Expanded AMD64 deployment and platform assurance | Same logical ABI and policy conformance tests across supported architectures |
 | 18 | Wasm/WASI, selected hardware and local inference | Portable tool and agent execution; measured device overhead |
 | 19 | Distributed agents and hardware acceleration experiments | Evaluated research prototypes |
 
@@ -797,7 +800,7 @@ The following are proposed software release gates, not current implementation st
 | v0.5 | 11–12 | Clavenar OS — Reflex | Extended audit and controlled replay, plus verified reactive kernel programs. Demonstrate bounded execution, revocation, event-storm controls and routine authorized responses without live inference. In parallel, target AMD64 guest support and Clavenar Virtual MVP (V0.5) on QEMU/KVM; neither blocks an RV64 release. |
 | v0.6 | 13–14 | Clavenar OS — Persistence | VirtIO block storage, durable transactions, logical agent checkpoints, restartable services and tested crash recovery. Do not blindly repeat external side effects after recovery. |
 | v0.7 | 15 | Clavenar OS — Standalone | Native VirtIO-net, IP/TCP, DNS, HTTP/TLS and authorized remote MCP without a QEMU host protocol bridge. Real model inference may still use an external provider. This is standalone networking on supported platforms, not a claim of local LLM inference or broad physical hardware support. |
-| v0.8–v0.x | 16–19, prioritized as justified | Hardening and expansion | Stronger information-flow controls, assurance, ARM64 and further platform support, portable Wasm/WASI tools, selected real hardware and other research work. Scope and order depend on evidence and demand. |
+| v0.8–v0.x | 16–19, prioritized as justified | Hardening and expansion | Stronger information-flow controls, assurance across RV64 and AMD64, portable Wasm/WASI tools, selected real hardware and other research work. Scope and order depend on evidence and demand. |
 | v1.0 | After production release criteria are met | Clavenar OS — Production | Documented and stable supported ABI, defined platform matrix, security review, reproducible release artifacts, reliability and recovery tests, operational documentation and a vulnerability response process. Production readiness is evidence-based; completion of every optional hardware experiment is not required. |
 
 **Delivery priorities:** v0.1 is the first conventional OS release; v0.3 is the first agent-native core; v0.4 is the first major public agentic demonstration; v0.5 demonstrates the distinctive Agentic Reflex Architecture and is the target window for the first KVM-accelerated Goal Machine; v0.7 adds the option of native networking without a host protocol bridge. Virtual deployments may intentionally remain no-NIC indefinitely. Later releases extend assurance, compatibility and deployment support.
@@ -815,7 +818,7 @@ Track A is the primary engineering track. Track B may progress independently onc
 | Agent core | Goals, agent identities, supervision, budgets and mock inference (v0.3); start AMD64 boot/HAL | Agent definitions, workflows, tool registry, inference broker and RMCP gateway |
 | Agentic MVP | Native local MCP, transactional execution, approvals, restricted QEMU bridge (v0.4) | Host bridge, remote MCP, model adapters, developer SDK and end-to-end demo |
 | Reflex and persistence | Kernel reflex VM, audit/replay, persistent storage, agent recovery (v0.5–v0.6); AMD64 KVM guest conformance | Policy tooling, replay harness, management UI and hosted recovery experiments |
-| Standalone and expansion | Native networking, remote MCP, assurance, ARM64 and expanded AMD64 support (v0.7+) | Enterprise integrations, fleet management, Clavenar Guard and managed services |
+| Standalone and expansion | Native networking, remote MCP, assurance and expanded AMD64 support (v0.7+) | Enterprise integrations, fleet management, Clavenar Guard and managed services |
 
 ```text
 Track A (primary):   RV64 kernel -> isolated OS -> secure core -> agent core
@@ -844,7 +847,7 @@ H and V release numbers are independently versioned and do not imply the same ma
 | v0.5 Reflex | H0.6: hosted reflexes and events | V0.5: AMD64/QEMU/KVM Goal Machine MVP; guest conformance, mediated egress and host-side teardown |
 | v0.6 Persistence | H0.7: durable agent state and audit | V0.6: durable artifacts, disk support and controlled recovery |
 | v0.7 Standalone | H0.8+: optional Wasm/microVM backend integrations | V0.7: expanded VM testing, optional native networking; no-NIC remains supported |
-| v0.8+ Expansion | H0.9+: fleet management as justified | V0.8+: snapshots, ARM64, Firecracker evaluation or direct-KVM VMM research |
+| v0.8+ Expansion | H0.9+: fleet management as justified | V0.8+: snapshots, Firecracker evaluation on AMD64 or direct-KVM VMM research |
 | v1.0 Production | H1.0 only after hosted release gates | V1.0 only after virtual release gates |
 
 **Priority order:** RV64 kernel foundation; secure agent primitives; early AMD64 bring-up; native agent MVP with host services; AMD64 Goal Machine MVP; then persistence, standalone networking and hardening. No custom VMM is required for these first commercial milestones. Section 30.4 is a subsystem roadmap aligned to these release gates, not a replacement for the master roadmap.
@@ -1382,14 +1385,12 @@ The system can eventually operate in three VM isolation modes: one VM for cooper
 
 ### 32.2 QEMU TCG versus KVM
 
-QEMU TCG translates guest instructions and enables RV64 development on Intel/AMD or ARM hosts without RISC-V hardware. It is an excellent debugging and CI platform but is not the expected high-density deployment mechanism on AMD64. QEMU can also use KVM to run matching-architecture guests with hardware-assisted virtualization. Most ordinary guest instructions then execute directly on the physical CPU, with VM exits and device handling managed by the VMM and KVM.
+QEMU TCG translates RV64 guest instructions on an AMD64 development host. It is an excellent debugging and CI platform but is not the expected high-density deployment mechanism on AMD64. QEMU can also use KVM to run matching-architecture guests with hardware-assisted virtualization. Most ordinary guest instructions then execute directly on the physical CPU, with VM exits and device handling managed by the VMM and KVM.
 
 | Host | Guest | Initial approach |
 |---|---|---|
 | AMD64 | RV64 | QEMU TCG emulation |
 | AMD64 | AMD64 | QEMU/KVM with accessible hardware virtualization |
-| ARM64 | RV64 | QEMU TCG emulation |
-| ARM64 | ARM64 | QEMU/KVM on supported hosts |
 | RV64 | RV64 | QEMU/TCG or KVM where hardware, kernel and platform support it |
 
 AMD64 means x86-64, including compatible Intel processors. KVM availability depends on the host kernel, processor, permissions and cloud/nested virtualization policy. An AMD64 port is necessary for efficient native guest execution on AMD64 but does not by itself make Clavenar compatible with every VMM or boot protocol.
@@ -1489,7 +1490,7 @@ Commands are proposed CLI contracts. Distinguish logical agent checkpoints, file
 | V0.5 | AMD64/QEMU/KVM Goal Machine MVP; launch, cancel, artifact review and no-bypass tests |
 | V0.6 | Persistent/scratch block storage, durable artifact publication and recovery |
 | V0.7 | Wider VM integration and optional native networking; no-NIC profile remains available (not a dependency of Goal Machines) |
-| V0.8+ | VM checkpoint experiments, pools, ARM64, Firecracker or direct KVM research, as justified |
+| V0.8+ | VM checkpoint experiments, pools, Firecracker on AMD64 or direct KVM research, as justified |
 | V1.0 | Supported hardened production deployment with independent review, tested isolation, resource control, recovery, documented platform matrix and operational procedures |
 
 These revised virtual milestones supersede earlier suggestions to postpone AMD64 until late expansion. Native release v0.5 and Virtual V0.5 are intended convergence targets, not a requirement to delay RV64 releases if AMD64 slips.
@@ -1502,7 +1503,6 @@ These revised virtual milestones supersede earlier suggestions to postpone AMD64
 |---|---|
 | RV64 | Reference design, QEMU development, research and future embedded hardware |
 | AMD64 | Early second port, commercial Goal Machines on commodity servers, KVM and alternative VMMs |
-| ARM64 | Subsequent cloud/edge target, as demand and engineering capacity justify |
 | WebAssembly | Architecture-independent application format through a restricted runtime, not a CPU port |
 
 Separate architecture-specific boot, interrupt entry, paging, context switching, syscall conventions, CPU-local state, timers and SMP support from common kernel logic. Keep portable capabilities, goals, budgets, IPC semantics, reflex bytecode and filesystem logic in shared code. Define architecture-neutral syscall numbers and fixed-width public types; actual register conventions differ. Hardware abstraction contracts must specify lifetime, alignment, memory ordering, interrupt/preemption and unsafe requirements. Avoid assuming RISC-V's memory ordering or trap behavior applies on another architecture.

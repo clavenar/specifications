@@ -1,12 +1,13 @@
 # Clavenar OS — Architecture and Vision
 ## Infrastructure for autonomous intelligence
 
-**Architecture and vision — draft 0.13 — 27 November 2026**
+**Architecture and vision — draft 0.14 — 28 November 2026**
 
 **Project name:** Clavenar OS  
 **Umbrella brand:** Clavenar — clavenar.io  
-**Platforms:** RV64 reference; AMD64 prioritized for hardware-accelerated Goal Machines; ARM64 later; Linux-hosted runtime and virtual deployment planned  
-**Implementation status, 27 November 2026.** The RV64 kernel runs isolated programs and a goal with an agent and delegated helpers. It enforces file grants and byte budgets, records decisions, and supports review, commit or discard of one private rename. Kernel 0.0.35 (`f0b1003`) introduced the read-directory boundary. The QEMU walkthroughs were also checked on 0.0.36. Native v0.4 calls for real inference and MCP through a restricted host bridge. [Verified baseline](#21-rv64-prototype-and-verification-baseline) · [MVP scenario status](#241-demonstration-scenario)
+**Native CPU targets.** RV64 on QEMU `virt` is the reference platform. AMD64 is planned for hardware-accelerated Goal Machines.
+
+**Implementation status, 28 November 2026.** Kernel 0.0.93 runs isolated RV64 programs, a supervised two-file rename, and a guest agent that can use Ollama and MCP through a host broker. The prototype also recovers selected files and agent checkpoints after reboot. Its user-space network service has separate HTTP and TLS probes on a private QEMU link. [Verified baseline](#21-rv64-prototype-and-verification-baseline) · [MVP scenario status](#241-demonstration-scenario)
 
 > Intelligence is untrusted. Authority is explicit. Autonomy is bounded. State is reversible where possible. Execution is accountable.
 
@@ -18,7 +19,7 @@ A conventional OS manages processes, memory, files, devices and CPU time. Claven
 
 The central research question is whether a clean-slate operating system can provide these guarantees more consistently, with a smaller auditable security boundary and less integration complexity, than an equivalently hardened Linux-hosted agent runtime.
 
-The reference target is QEMU's RV64 `virt` machine with OpenSBI. The native kernel and its userland are the primary engineering deliverables. Clavenar Hosted would provide the same logical agent API on Linux and can develop independently. Clavenar Virtual runs the native kernel as a guest. Development uses QEMU/TCG on non-RISC-V hosts. The roadmap starts the AMD64 port during native v0.3 and targets QEMU/KVM on compatible AMD64 hosts at Virtual V0.5. Disposable VMs scoped to a goal (Goal Machines) are the first commercial native deployment proposed. ARM64, physical devices, robotics, hardware co-design and a dedicated Rust VMM remain later options.
+The reference target is QEMU's RV64 `virt` machine with OpenSBI. The native kernel and its userland are the primary engineering deliverables. Clavenar Hosted would provide the same logical agent API on Linux and can develop independently. Clavenar Virtual runs the native kernel as a guest. Development uses QEMU/TCG on non-RISC-V hosts. The roadmap starts the AMD64 port during native v0.3 and targets QEMU/KVM on compatible AMD64 hosts at Virtual V0.5. Disposable VMs scoped to a goal (Goal Machines) are the first commercial native deployment proposed. Physical RISC-V boards, robotics, hardware co-design and a dedicated Rust VMM are longer-term options.
 
 Clavenar is not an agent-only OS. Conventional tools, services and native applications are essential; agents use these deterministic components to perform work efficiently. Three complementary execution models define the platform: imperative programs, goal-driven agents, and verified reactive policies (Agentic Reflex Architecture). MCP is a core user-space interoperability standard, not a privileged protocol or security boundary. Agent definitions combine detailed instructions, skills, workflows, requested capabilities, budgets and lifecycle settings.
 
@@ -36,9 +37,7 @@ Clavenar is not an agent-only OS. Conventional tools, services and native applic
 | Virtualization | QEMU/TCG for RV64 development; QEMU/KVM for AMD64 deployment; optional direct-KVM VMM only after measurement. |
 | Licensing | Prefer Apache 2.0 for the open core, subject to license and governance review. |
 
-**How to read this document.** Sections 2–17 define the common architecture and core mechanisms; Sections 18–20 and 25–27 cover differentiation, evidence, threats and positioning. Sections 21–24 define the starting point, repository and authoritative delivery roadmap. Sections 28–36 specify reflexes, userland, MCP, deployment, inference, agent definitions and commercialization. Section 23 is the master release plan; later subsystem roadmaps depend on it. Appendix A defines frequently used terms. Document revision numbers are independent of software release numbers.
-
-**Draft 0.13** illustrates goal supervision, filesystem and package layouts, the development tracks, and the proposed execution and deployment flows. Section 21 records the verified native baseline, Section 23 defines the release gates, and Section 24 tracks the six v0.4 demonstration scenarios.
+Sections 2–17 define the common architecture. Sections 18–20 and 25–27 cover research, threats and positioning. Sections 28–36 develop the subsystem and deployment designs. Use the [RV64 baseline](#21-rv64-prototype-and-verification-baseline) for what runs today, the [development roadmap](#23-development-roadmap) for release gates, and the [demonstration scenarios](#241-demonstration-scenario) for reproducible evidence. Document revisions and software releases are versioned independently.
 
 ## 2. Design philosophy
 
@@ -159,7 +158,7 @@ These fields describe a protected table entry. A caller presents an opaque handl
 - Object lifetime: handles cannot silently refer to recycled objects after deletion or restart.
 - No ambient bypass: raw device access, arbitrary memory mapping, unrestricted networking, generic proxy tools and privileged IPC must not circumvent restrictions.
 
-Only the boot shell starts with a RamFS working directory (`/`). The initial `hello` task and a plain child start with an empty RamFS handle table and no working directory. A directory grant lets a child use read-only `open_at` within that tree. A goal owner can grant one regular file, restrict who may receive it, and revoke its derived handles. With `--read-under`, even an explicitly granted file must be linked inside the permitted tree at read time. RamFS checks the resolved object on every read by a goal member, including a delegated helper. [Launch and handle initialization](https://github.com/clavenar/core/blob/f0b1003ba826ef95ce03e914a79ff36a6c75453b/native/kernel/src/scheduler.rs) · [Read confinement in QEMU](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#limit-file-reads-to-a-directory)
+Only the boot shell starts with a RamFS working directory (`/`). The initial `hello` task and a plain child start with an empty RamFS handle table and no working directory. A directory grant lets a child use read-only `open_at` within that tree. A goal owner can grant one regular file for reading, restrict delegation and revoke the derived handles. A rename goal can grant staging rights on up to two files. With `--read-under`, even an explicitly granted file must be linked inside the permitted tree at read time. RamFS checks the resolved object on every read by a goal member, including a delegated helper. [Launch and handle initialization](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/native/kernel/src/scheduler.rs) · [Read confinement in QEMU](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#limit-file-reads-to-a-directory)
 
 ### 5.2 Intent-based security
 
@@ -294,13 +293,13 @@ Keep the kernel ABI small. Many agent operations are better implemented as typed
 | `reflex_install`, `reflex_attach`, `reflex_disable`, `reflex_inspect` | Bounded reactive policy lifecycle | User-space service first, optional verified kernel backend |
 | Tool discovery, MCP invocation, definition reload | Application protocols and configuration | User-space services over authenticated IPC |
 
-The table describes the proposed service interfaces. The native RV64 ABI implements calls 0–79. `ecall` takes the number in `a7` and up to six arguments in `a0`–`a5`. The primary result is in `a0`, with additional registers defined per call. For example, `wait` returns the child's completion kind and detail, and typed IPC supplies a kernel-authenticated sender identity. [Shared syscall numbers](https://github.com/clavenar/core/blob/f0b1003ba826ef95ce03e914a79ff36a6c75453b/crates/clv-abi/src/lib.rs) · [Native ABI and wire formats](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/native-syscall-abi.md)
+The table describes the proposed service interfaces. The native RV64 ABI in `clv-abi` 0.0.14 defines 78 syscall numbers, 0–77. `ecall` takes the number in `a7` and up to six arguments in `a0`–`a5`. The primary result is in `a0`, with additional registers defined per call. For example, `wait` returns the child's completion kind and detail, and typed IPC supplies a kernel-authenticated sender identity. [Shared syscall numbers](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/crates/clv-abi/src/lib.rs) · [Native ABI and wire formats](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/native-syscall-abi.md)
 
 The versioned ABI should define fixed-width wire types, error values, argument structures, alignment and user-memory copying. Specify the boot ABI separately. Use explicit layouts for shared structures and validate sizes, versions and flags. Other CPU architectures can implement the same logical operations with their own entry instructions and registers.
 
 ## 8. Goal-oriented shell
 
-At the native `clsh>` prompt, `help` lists the implemented commands, including `goal create`, `agent run`, `goal diff`, `goal commit` and `goal audit --reads`. The shell tracks its current goal handle. [Runnable shell walkthroughs](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md)
+At the native `clsh>` prompt, `help` lists the implemented commands, including `goal create`, `agent run`, `goal diff`, `goal commit` and `goal audit --reads`. The shell tracks its current goal handle. [Runnable shell walkthroughs](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md)
 
 The following transcript illustrates the **proposed `clv` management CLI** for Native and Hosted. Section 31.6 defines how it would expose backend-specific operations.
 
@@ -403,7 +402,7 @@ Model inference does not belong in privileged kernel code. Define a provider-ind
 
 ### 11.1 QEMU inference bridge
 
-Start with deterministic mock responses, then connect native agents to the shared hosted `modeld` via a dedicated bounded guest–host service channel, separate from the console. The host handles provider HTTPS, credentials and aggregate budget enforcement. The guest need not implement TCP/IP. Sections 32.3 and 34 specify the transport, trust boundary and native networking transition.
+The RV64 guest can request a deterministic plan or a decision from local Ollama through a dedicated VirtIO console port. The Python broker on the QEMU host reserves a per-session allowance in SQLite before dispatch, records the outcome and returns a bounded reply. The kernel checks the requesting agent’s pinned definition and goal authority. The interactive shell uses the UART. A reusable `modeld` and additional providers are part of the design. [Model-backed plan](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#run-a-model-backed-plan) · [Bridge transport](#323-minimal-virtual-hardware-and-bridge)
 
 ### 11.2 Safe execution of model outputs
 
@@ -604,6 +603,8 @@ This design limits the consequences of prompt injection; it does not eliminate p
 
 ## 17. Why RISC-V and Rust?
 
+The current RV64 platform is QEMU `virt` with OpenSBI. Bringing up a physical RISC-V board requires a compatible firmware handoff, memory map, interrupt and timer support, and drivers for its devices. [Platform targets](../engineering/repository-layout.md#10-abi-protocols-and-platform-targets)
+
 | RISC-V property | Potential benefit |
 |---|---|
 | Open instruction set | Architectural experiments and hardware/software co-design |
@@ -716,18 +717,20 @@ These primary sources describe the mechanisms used for comparison.
 
 ## 21. RV64 prototype and verification baseline
 
-On 27 November 2026 the RV64 implementation was verified on QEMU `virt` with OpenSBI and one hart. Kernel 0.0.35 (`f0b1003`) is the functional baseline. Kernel 0.0.36 (`cd78ad9`) packages the walkthroughs and ABI reference used below. Package versions identify builds. Section 23 defines the evidence required for a native release. [0.0.35 source](https://github.com/clavenar/core/tree/f0b1003ba826ef95ce03e914a79ff36a6c75453b) · [0.0.36 build instructions](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/README.md#build-and-run-the-rv64-kernel)
+Kernel 0.0.93 and `clv-abi` 0.0.14 are the reference for the examples below. The guest boots on QEMU `virt` with OpenSBI and one RV64 hart. The package version identifies this build. Section 23 defines the cumulative release gates. [Core at `9559b5b`](https://github.com/clavenar/core/tree/9559b5bd2e3ef99712e492d80406e53550a7db8b) · [Build and boot](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/README.md#build-and-run-the-rv64-kernel)
 
-| Area | Implemented behavior | Prototype limit |
+| Area | What runs in this revision | Scope and reproduction |
 |---|---|---|
-| Isolation and execution | The kernel loads four separately linked ELF images for `hello`, the shell, `echo` and `grep`. Each has an Sv39 root and a private 4 KiB stack. | One fixed task slot per program and a 47-frame boot pool. Each ELF has one read/execute segment of up to 28 KiB. [Boot and shell](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#boot-and-shell) |
-| Files and IPC | The shell grants file or confined directory handles. Children exchange typed requests and replies. A bounded pipe supports streaming file data, and the shell can wait for child completion events. | RamFS is volatile, with four writable file slots, four directory slots besides root and four handles per task. [RamFS](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/native-syscall-abi.md#ramfs) · [Pipes and events](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/native-syscall-abi.md#pipes-and-completion-events) |
-| Agents and budgets | A goal can run an agent, delegate a helper, restrict file reads, reserve reply bytes, suspend or cancel local work, and inspect attributed audit records. | One open goal, at most one agent and up to three member launches over the goal's lifetime. The budgets cover local bytes and launch slots. [Goal lifecycle](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#create-a-goal-and-inspect-its-children) · [Read limits](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#delegation-and-read-limits) |
-| Tools and publication | The pinned `find-greeting@2` definition invokes `text.search@1`. An agent can also propose a file rename for owner review, commit or discard. | The planner is scripted. A goal can hold one pending same-directory rename, bound to the RamFS revision and, optionally, the original file and its contents. [Mock tool invocation](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#invoke-a-registered-file-tool) · [Reviewed renames](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#reviewed-renames) |
+| Isolation and scheduling | Five user ELFs (`hello`, the shell, `echo`, `grep` and `netd`) supply seven fixed task slots. Each slot has its own Sv39 root and private stack. Three slots share the executable pages of `echo`. | The quickstart starts `hello` and the shell. The network service starts when a modern VirtIO NIC initializes. [Boot, stacks and image limits](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#boot-and-shell) |
+| Files, IPC and authority | Only the boot shell starts with a RamFS working directory. It can grant file or confined directory handles. Typed messages and bounded stdin/stdout pipes connect native tasks. | RamFS has four writable files of up to 256 bytes each, four directories besides root and four handles per task. A goal can further restrict reads to a directory. [RamFS](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/native-syscall-abi.md#ramfs) · [Bounded streams](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#send-data-through-stdin-and-stdout) |
+| Goals and publication | One open goal admits one agent and up to three member launches over its lifetime. A separate supervisor can review up to two staged renames. A read-only monitor can report the outcome. The shell owns the final commit. | Each rename stays in the source file’s directory. Review binds the staged batch and base revision. A failed preservation check or a stale review blocks publication. [Worker, supervisor and monitor](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#observe-a-reviewed-publication) |
+| Planning and tools | `find-greeting@2` invokes `text.search@1` over native messages. Revision 4 uses local MCP over stdio. Revision 8 can combine Ollama, local MCP and an approved host MCP call in one goal. | The latter uses an allowlisted loopback fixture and a per-session SQLite journal for model usage and host tool calls. The guest can run this scenario with `-nic none`. [Local MCP](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#invoke-a-registered-file-tool-over-mcp) · [Combined run](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#run-ollama-and-both-mcp-searches-in-one-goal) |
+| Persistence and recovery | With a dedicated VirtIO block image, a reviewed commit can persist one or two root-level files. A local search can resume from a checkpoint. A host search can recover a recorded receipt with the same checkpoint disk and host journal. | Each walkthrough uses a purpose-specific image. A host request with an unknown outcome keeps its reservation. [Durable rename batch](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#persist-two-renames-in-one-commit) · [Local checkpoint](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#resume-a-local-search-checkpoint) · [Host checkpoint](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#recover-a-host-mcp-search-checkpoint) |
+| Native networking | `netd` uses smoltcp for Ethernet, ARP, IPv4, ICMP, UDP and TCP. Separate feature builds issue an HTTP GET or authenticate a TLS 1.3 fixture peer. | The peer and address are fixed on a private QEMU link. DNS, goal-authorized HTTPS and remote MCP over the guest network remain phase 15 requirements. [HTTP probe](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#fetch-an-http-response-over-native-tcp) · [TLS probe](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#authenticate-a-tls-peer-over-native-tcp) |
 
 ### 21.1 Reproduce the baseline
 
-Build and boot either revision above from its Core repository root. Check the package version in the boot banner, four `User ELF loaded entry=` lines, `Sv39 paging enabled` and the `clsh>` prompt. On a fresh boot, run this pinned definition. [Build and run](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/README.md#build-and-run-the-rv64-kernel)
+From the Core repository root at `9559b5b`, build the default kernel and start QEMU with `-nic none`. Look for `Clavenar kernel booted (v0.0.93)`, five `User ELF loaded entry=` lines, `Sv39 paging enabled` and the `clsh>` prompt. Enter the following commands at that prompt on a fresh boot. [Build and run](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/README.md#build-and-run-the-rv64-kernel)
 
 ```text
 goal create --children 2 --allow-tool text.search@1 --read-bytes 18 --reply-bytes 36
@@ -746,7 +749,7 @@ The wait reports exit 0 and the reply prints `Hello from RamFS`. Check for `defi
 
 ### 21.2 Sv39 and isolation
 
-Sv39 uses three page-table levels with 512 eight-byte entries per table. Bits 63–39 of a virtual address must equal bit 38. The base page size is 4 KiB, with 2 MiB and 1 GiB superpages available. The supervisor selects the translation mode and root with `satp` and synchronizes address translation with `sfence.vma`. The prototype uses 4 KiB leaves and changes the active root on a task switch. [RISC-V Supervisor ISA](https://docs.riscv.org/reference/isa/v20260120/priv/supervisor.html) · [Address-space implementation](https://github.com/clavenar/core/blob/f0b1003ba826ef95ce03e914a79ff36a6c75453b/native/kernel/src/memory/sv39.rs)
+Sv39 uses three page-table levels with 512 eight-byte entries per table. Bits 63–39 of a virtual address must equal bit 38. The base page size is 4 KiB, with 2 MiB and 1 GiB superpages available. The supervisor selects the translation mode and root with `satp` and synchronizes address translation with `sfence.vma`. The prototype uses 4 KiB leaves and changes the active root on a task switch. [RISC-V Supervisor ISA](https://docs.riscv.org/reference/isa/v20260120/priv/supervisor.html) · [Address-space implementation](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/native/kernel/src/memory/sv39.rs)
 
 ### 21.3 Historical baseline of 25 November 2026
 
@@ -781,7 +784,7 @@ The first `askat` prints `scoped-ok` and `hello` exits with status 0. The second
 
 | Repository | Responsibility |
 |---|---|
-| `clavenar/core` | Kernel in `native/kernel/`, linker scripts in `native/linker/`, shared syscall definitions in `crates/clv-abi/`, native wrappers in `userspace/libclv/` and the shell, `hello`, `echo` and `grep` in `userspace/`. |
+| `clavenar/core` | RV64 kernel and linker in `native/`, shared syscall definitions in `crates/clv-abi/`, and wrappers, shell, worker programs and `netd` in `userspace/`. The QEMU host broker lives in `platforms/qemu-riscv64-virt/`. |
 | `clavenar/specifications` | Canonical architecture, engineering layout and future normative security and protocol documents. |
 | `clavenar/website` | Project site and documentation navigation. |
 
@@ -793,7 +796,7 @@ This is the master delivery roadmap for Clavenar OS, not just for the agent runt
 
 ### 23.1 Native implementation phases
 
-The RV64 prototype exercises goal lifecycles and local budgets from phases 6–7, a pinned mock agent and tool checks from phase 8, and one reviewed RamFS rename from phase 9. The phase 10 host bridge is pending. Each release still requires the exit criteria in the tables below. [Current QEMU evidence](#241-demonstration-scenario)
+The current RV64 build exercises reviewed publication and host-backed inference and MCP from phases 9–10. Phases 11–14 have bounded examples of offline replay, a read-denial watch, durable publication and checkpoint recovery. Phase 15 has a private network link and separate HTTP and TLS probes. Goal-authorized HTTPS, DNS and remote MCP over the guest network are open. Each release requires all of its exit criteria and those of earlier releases. [MVP evidence](#241-demonstration-scenario) · [Offline replay](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#replay-a-combined-goal-offline) · [Read-denial watch](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#watch-for-a-read-scope-denial) · [Native networking](#342-native-networking-at-v07)
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
@@ -814,7 +817,7 @@ The RV64 prototype exercises goal lifecycles and local budgets from phases 6–7
 | 14 | Durable agent checkpoints and restartable services | Recovery without duplicate external actions |
 | 15 | VirtIO-net, smoltcp, HTTP/TLS and native remote MCP | Authorized HTTPS requests; no network bypass |
 | 16 | Information-flow controls and stronger assurance | Restricted egress and adversarial tests |
-| 17 | ARM64 port, expanded AMD64 deployment and platform assurance | Same logical ABI and policy conformance tests across supported architectures |
+| 17 | Expanded AMD64 deployment and platform assurance | Same logical ABI and policy conformance tests across supported architectures |
 | 18 | Wasm/WASI, selected hardware and local inference | Portable tool and agent execution; measured device overhead |
 | 19 | Distributed agents and hardware acceleration experiments | Evaluated research prototypes |
 
@@ -832,7 +835,7 @@ These are proposed software release gates. Each release carries forward earlier 
 | v0.5 | 11–12 | Clavenar OS — Reflex | Extended audit and controlled replay, plus a bounded user-space reflex that responds without inference. Demonstrate revocation and event-storm controls. A kernel backend is conditional on the additional evidence above. AMD64/KVM Goal Machines target the independent Virtual V0.5 gate. |
 | v0.6 | 13–14 | Clavenar OS — Persistence | VirtIO block storage, durable transactions, logical agent checkpoints, restartable services and tested crash recovery. Do not blindly repeat external side effects after recovery. |
 | v0.7 | 15 | Clavenar OS — Standalone | Native VirtIO-net, IP/TCP, DNS, HTTP/TLS and authorized remote MCP without a QEMU host protocol bridge. Real model inference may still use an external provider. This is standalone networking on supported platforms, not a claim of local LLM inference or broad physical hardware support. |
-| v0.8–v0.x | 16–19, prioritized as justified | Hardening and expansion | Stronger information-flow controls, assurance, ARM64 and further platform support, portable Wasm/WASI tools, selected real hardware and other research work. Scope and order depend on evidence and demand. |
+| v0.8–v0.x | 16–19, prioritized as justified | Hardening and expansion | Stronger information-flow controls, assurance across RV64 and AMD64, portable Wasm/WASI tools, selected real hardware and other research work. Scope and order depend on evidence and demand. |
 | v1.0 | After production release criteria are met | Clavenar OS — Production | Documented and stable supported ABI, defined platform matrix, security review, reproducible release artifacts, reliability and recovery tests, operational documentation and a vulnerability response process. Production readiness is evidence-based; completion of every optional hardware experiment is not required. |
 
 **Delivery priorities:** v0.1 is the first conventional OS release; v0.3 is the first agent-native core; v0.4 is the first major public agentic demonstration; v0.5 demonstrates the distinctive Agentic Reflex Architecture and is the target window for the first KVM-accelerated Goal Machine; v0.7 adds the option of native networking without a host protocol bridge. Virtual deployments may intentionally remain no-NIC indefinitely. Later releases extend assurance, compatibility and deployment support.
@@ -850,7 +853,7 @@ Track A is the primary engineering track. Track B may progress independently onc
 | Agent core | Goals, agents, supervision, budgets, initial contract restrictions and mock inference (v0.3). Start AMD64 boot/HAL. | Agent definitions, workflows, tool registry, inference broker and RMCP gateway |
 | Agentic MVP | Native local MCP, transactional execution, approvals, restricted QEMU bridge (v0.4) | Host bridge, remote MCP, model adapters, developer SDK and end-to-end demo |
 | Reflex and persistence | Bounded user-space reflexes, audit/replay, persistent storage and agent recovery (v0.5–v0.6). Evaluate AMD64/KVM guest conformance separately. | Policy tooling, replay harness, management UI and hosted recovery experiments |
-| Standalone and expansion | Native networking, remote MCP, assurance, ARM64 and expanded AMD64 support (v0.7+) | Enterprise integrations, fleet management, Clavenar Guard and managed services |
+| Standalone and expansion | Native networking, remote MCP, assurance and expanded AMD64 support (v0.7+) | Enterprise integrations, fleet management, Clavenar Guard and managed services |
 
 ```mermaid
 flowchart TB
@@ -884,7 +887,7 @@ H and V release numbers are independently versioned and do not imply the same ma
 | v0.5 Reflex | H0.6: hosted reflexes and events | V0.5: AMD64/QEMU/KVM Goal Machine MVP; guest conformance, mediated egress and host-side teardown |
 | v0.6 Persistence | H0.7: durable agent state and audit | V0.6: durable artifacts, disk support and controlled recovery |
 | v0.7 Standalone | H0.8+: optional Wasm/microVM backend integrations | V0.7: expanded VM testing, optional native networking; no-NIC remains supported |
-| v0.8+ Expansion | H0.9+: fleet management as justified | V0.8+: snapshots, ARM64, Firecracker evaluation or direct-KVM VMM research |
+| v0.8+ Expansion | H0.9+: fleet management as justified | V0.8+: snapshots, Firecracker evaluation on AMD64 or direct-KVM VMM research |
 | v1.0 Production | H1.0 only after hosted release gates | V1.0 only after virtual release gates |
 
 **Priority order:** RV64 kernel foundation; secure agent primitives; early AMD64 bring-up; native agent MVP with host services; AMD64 Goal Machine MVP; then persistence, standalone networking and hardening. No custom VMM is required for these first commercial milestones. Section 30.4 is a subsystem roadmap aligned to these release gates, not a replacement for the master roadmap.
@@ -907,18 +910,18 @@ Run them in separate Sv39 address spaces with independent capability tables, eve
 
 On native v0.4, start each run from the same known fixture with files under `/home/work` and `/private`. Give the filesystem agent a private transaction and permission to organize files only under `/home/work`. Use a fresh goal, budget and transaction for each outcome. Drive the denial cases with scripted requests so a cooperative model cannot mask a missing check.
 
-On 27 November 2026 the guest checks below exercised the 0.0.35 mechanisms on kernel 0.0.36. The shell owns review and audit, and the goal can admit one agent along with its children or helpers. The separately authorized supervisor, filesystem agent and read-only monitor are still an integration milestone. Each link gives a reproducible guest check or, for external interoperability, the nearest implemented local operation.
+Kernel 0.0.93 exercises the following cases with fixed workloads. In the publication example, `hello` stages the changes, a delegated `echo` supervisor reviews them, and a separate `echo` monitor observes the outcome. Each runs in its own address space. The shell owns the goal and authorizes publication. The model and MCP walkthrough uses a separate goal. Section 24.2 defines the wider acceptance criteria.
 
 | Run | Required v0.4 result | Current RV64 evidence |
 |---|---|---|
-| Publish or discard | Stage the same rename in two runs. An independent check confirms the permitted scope and preserves file contents. On authorized commit only the reviewed change becomes visible. On discard the original tree remains intact. | Verified for one file. A staged name stays private, an authorized commit publishes it, and discard preserves the original. [Agent rename](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#let-the-goals-agent-propose-a-rename) · [Discard](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#discard-a-staged-rename) |
-| Invalid result or stale review | Stage a result that loses required contents, or change the base after approval. Publication fails in each run and the committed tree preserves the authoritative version. | Verified for a rename. An edit before staging can fail the preserved-content check. An edit after a passing review produces a commit conflict. [Postcondition check](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#preserve-a-goals-input-file) · [Stale review](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#inspect-rename-publication-decisions) |
-| Denied access or delegation | Request a read of `/private`, then request a grant outside the supervisor's authority. Check the denials at the resource handlers, the attributed audit entries and the absence of data in the reply. | Verified for an explicitly granted out-of-tree file and a disallowed tool delegation. The read audit shows `outside-read-scope` and zero bytes. The tool denial identifies the calling agent. [Private read](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#limit-file-reads-to-a-directory) · [Delegation denial](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#require-an-exact-tool-revision-for-a-goal) |
-| Exhaustion | Competing child requests target the last available allocation. Admitted reservations fit the limit and the broker records no dispatch for the rejected work. | Verified locally. With 12 of 24 reply bytes reserved, a second child requesting 13 is refused and the balances are preserved. External reservations and the host dispatch record are pending. [Competing reservations](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#reserve-reply-bytes-for-children) |
-| Cancellation | Cancel with a local child active and a broker request outstanding. New dispatches stop, the child is cleaned up and its private changes cannot publish. The broker keeps any unsettled external reservation until reconciliation. | Verified locally. Cancelling a goal stops a suspended child and discards its pending rename. Cancellation with an outstanding host request and reconciliation of its charge are pending. [Cancel a live child and inspect the diff](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#cancel-a-goal) |
-| Real interoperability | In a fresh authorized run, use a real model, one local stdio MCP tool and one approved read-only remote MCP tool through the host. Check the durable host operation IDs and reconciled usage against the goal. | Pending. The working guest example runs a pinned mock and a native search helper. The local stdio MCP protocol, host bridge, real provider, remote MCP call and durable host journal are still required. [Current native tool path](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#invoke-a-registered-file-tool) |
+| Publish or discard | Stage the same rename in two runs. An independent check confirms the permitted scope and preserves file contents. On authorized commit only the reviewed change becomes visible. On discard the original tree remains intact. | The two-file fixture verifies both contents in `/home/work` and a sentinel in `/private`. The monitor reports either two published renames or a batch discarded on cancellation. [Both outcomes](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#observe-a-reviewed-publication) · [Explicit discard](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#discard-a-staged-rename) |
+| Invalid result or stale review | Stage a result that loses required contents, or change the base after approval. Publication fails in each run and the committed tree preserves the authoritative version. | An incomplete batch or a changed protected input fails review. Editing a source after review produces a commit conflict. Both original names remain visible. [Failed postconditions and stale review](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#publish-two-renames-in-one-commit) |
+| Denied access or delegation | Request a read of `/private`, then request a grant outside the supervisor's authority. Check the denials at the resource handlers, the attributed audit entries and the absence of data in the reply. | RamFS denies an out-of-tree read and records `outside-read-scope` and zero bytes read. A goal allowing only `text.search@1` also rejects an agent’s attempt to delegate directly to `grep`. The audit identifies the caller. [Directory confinement](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#limit-file-reads-to-a-directory) · [Delegation denial](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#require-an-exact-tool-revision-for-a-goal) |
+| Exhaustion | Competing child requests target the last available allocation. Admitted reservations fit the limit and the broker records no dispatch for the rejected work. | Two children compete for a local reply budget. In a separate broker run, the first plan spends one of two host units. A second plan needs two and is denied before dispatch. SQLite records zero units used for that refusal. [Child reservations](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#reserve-reply-bytes-for-children) · [Host reservations](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#run-a-host-backed-mock-plan) |
+| Cancellation | Cancel with a local child active and a broker request outstanding. New dispatches stop, the child is cleaned up and its private changes cannot publish. The broker keeps any unsettled external reservation until reconciliation. | Cancelling a reviewed rename discards it. In the silent-plan fixture, cancelling after host dispatch stops `hello` before delegation or reading. The host journal retains the `in_flight` request and its two reserved units. [Publication cancellation](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#cancel-a-reviewed-rename) · [Pending host request](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#run-a-host-backed-mock-plan) |
+| Real interoperability | In a fresh authorized run, use a real model, one local stdio MCP tool and one approved read-only remote MCP tool through the host. Check the durable host operation IDs and reconciled usage against the goal. | On a `search` decision, `find-greeting@8` invokes local `text.search@1` over guest stdio and `host.text.search@1` through the host broker. Ollama and the MCP Streamable HTTP server use host loopback. The journal ties separate model and tool request IDs and their usage to the same session, goal and launch. A `skip` ends the run before either search. [Combined Ollama and MCP run](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#run-ollama-and-both-mcp-searches-in-one-goal) |
 
-Native v0.6 repeats the publication and cancellation cases across a guest reboot to exercise durable recovery.
+Native v0.6 requires recovery across reboots. The current fixtures cover atomic publication of two root-level files, recovery after a storage failure, and recovery of a host tool receipt without repeating the call. [Durable batch and recovery](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#persist-two-renames-in-one-commit) · [Host tool recovery](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#recover-a-host-mcp-search-checkpoint)
 
 ### 24.2 Minimum acceptance criteria
 
@@ -1154,12 +1157,12 @@ The native prototype runs ordinary programs. The architecture also calls for ser
 
 | Execution model | Example | Representation |
 |---|---|---|
-| Imperative | `grep ERROR system.log` | Native ELF or Wasm program |
+| Imperative | `grep -F Hello /hello.txt` | Native ELF or Wasm program |
 | Intentional | `clv goal run "Diagnose failures"` | Goal, agent definition and runtime |
 | Reactive | On storage pressure, emit alert | Verified rule/bytecode |
 | Long-lived service | `mcpd`, `netd`, `modeld` | Supervised user process |
 
-The native shell implements `ls` and `cat` as built-ins. Its `grep -F` command launches a separate ELF with a read-only file grant, and `askfile --stream` uses a bounded pipe. Planned userland work includes `cp`, `mv`, `find`, `sort`, `uniq`, `wc`, `ps`, `kill`, standard streams and general handle mapping at spawn. Native ELF programs must match the target architecture and Clavenar ABI. Wasm/WASI is a later option. Full POSIX certification, Linux binary compatibility and a desktop remain outside the initial scope. [Native file and stream examples](https://github.com/clavenar/core/blob/cd78ad979fd882270cbcc3786a46306f18471ae9/docs/qemu-walkthroughs.md#requests-replies-and-file-streams)
+The native shell implements `ls` and `cat` as built-ins. Its `grep -F` command launches a separate ELF with a read-only file grant. Bounded stdin and stdout also connect the `hello` MCP client to the `grep` server. General handle mapping at spawn and utilities such as `cp`, `mv`, `find`, `sort`, `uniq`, `wc`, `ps` and `kill` remain planned. Native ELFs must match the target architecture and Clavenar ABI. Wasm/WASI is a later option. Full POSIX certification, Linux binary compatibility and a desktop remain outside the initial scope. [Pipes and streams](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#send-data-through-stdin-and-stdout) · [Local MCP tool](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#invoke-a-registered-file-tool-over-mcp)
 
 ### 29.1 Tool manifests
 
@@ -1282,7 +1285,7 @@ The 2025-11-25 MCP specification defines stdio and Streamable HTTP transports, n
 
 ### 31.1 Three deployment modes, one programming model
 
-Clavenar Hosted is a Rust-based agent execution and supervision platform on an unmodified Linux kernel. It is neither a new distribution nor a Linux kernel module. Clavenar Virtual runs the actual Clavenar kernel in a guest VM; Clavenar Bare Metal runs that kernel on physical hardware. A Linux guest managed by the Hosted runtime is still Hosted execution, not Clavenar Native.
+Clavenar Hosted is the proposed Rust agent runtime on an unmodified Linux kernel. In today’s QEMU prototype, agents run inside the Clavenar guest and a Python broker on Linux handles selected external requests. Clavenar Virtual uses this guest execution model. Bare Metal would run the native kernel directly on supported hardware.
 
 | Mode | Kernel executing agents | Intended use |
 |---|---|---|
@@ -1452,14 +1455,12 @@ The system can eventually operate in three VM isolation modes: one VM for cooper
 
 ### 32.2 QEMU TCG versus KVM
 
-QEMU TCG translates guest instructions and enables RV64 development on Intel/AMD or ARM hosts without RISC-V hardware. It is an excellent debugging and CI platform but is not the expected high-density deployment mechanism on AMD64. QEMU can also use KVM to run matching-architecture guests with hardware-assisted virtualization. Most ordinary guest instructions then execute directly on the physical CPU, with VM exits and device handling managed by the VMM and KVM.
+QEMU TCG translates RV64 guest instructions on an AMD64 development host. It is an excellent debugging and CI platform but is not the expected high-density deployment mechanism on AMD64. QEMU can also use KVM to run matching-architecture guests with hardware-assisted virtualization. Most ordinary guest instructions then execute directly on the physical CPU, with VM exits and device handling managed by the VMM and KVM.
 
 | Host | Guest | Initial approach |
 |---|---|---|
 | AMD64 | RV64 | QEMU TCG emulation |
 | AMD64 | AMD64 | QEMU/KVM with accessible hardware virtualization |
-| ARM64 | RV64 | QEMU TCG emulation |
-| ARM64 | ARM64 | QEMU/KVM on supported hosts |
 | RV64 | RV64 | QEMU/TCG or KVM where hardware, kernel and platform support it |
 
 AMD64 means x86-64, including compatible Intel processors. KVM availability depends on the host kernel, processor, permissions and cloud/nested virtualization policy. An AMD64 port is necessary for efficient native guest execution on AMD64 but does not by itself make Clavenar compatible with every VMM or boot protocol.
@@ -1476,22 +1477,15 @@ AMD64 means x86-64, including compatible Intel processors. KVM availability depe
 | VirtIO-net | Optional native networking, not required for Goal Machines |
 | VirtIO-fs, balloon, vTPM | Later, only if security/operational needs justify them |
 
-A no-NIC guest is a deliberately supported deployment, not merely a temporary limitation. Do not expose unintended device transports or host control sockets. The host should bind the service endpoint to a short-lived machine lease and authenticate session context independently of guest-provided identifiers. The VM does not receive an ordinary network adapter or arbitrary host filesystem mount. Its service channel exposes only structured operations approved by the host: inference, MCP, approvals, artifact import/export, audit and narrowly scoped credential-backed operations. Avoid exporting raw secrets. The host independently authorizes these operations using the machine's identity and goal lease, even if guest claims are malicious. Per-agent attribution from an uncompromised guest adds detail, but the outer host must not depend on those claims for the VM's aggregate limits. No NIC reduces direct egress opportunities; it does not eliminate exfiltration through allowed service calls or VM escape risks.
-
-To attach a dedicated serial device to the prototype, build the release ELF as in Section 21 and run this command from Core. Guest messaging over that device requires the planned driver and broker.
+The RV64 broker runs the guest with `-nic none`. After building the kernel, run this command at the Linux prompt in the Core repository.
 
 ```sh
-BRIDGE_DIR=$(mktemp -d)
-qemu-system-riscv64 \
-    -machine virt -accel tcg -m 128M -smp 1 \
-    -nographic -bios default -nic none \
-    -kernel target/riscv64gc-unknown-none-elf/release/clavenar-kernel \
-    -chardev socket,id=bridge,path="$BRIDGE_DIR/bridge.sock",server=on,wait=off \
-    -device virtio-serial-device \
-    -device virtserialport,chardev=bridge,name=org.clavenar.bridge
+python3 platforms/qemu-riscv64-virt/host_bridge.py --budget-units 2
 ```
 
-The UART carries the interactive shell. QEMU exposes the separate serial port at `$BRIDGE_DIR/bridge.sock`. A production launcher must restrict socket access, authenticate the machine session, bound messages and clean up resources. The planned AMD64 guest needs its own boot image or loader and matching virtual devices. An accelerated deployment also requires a compatible KVM host (Section 32.2).
+The broker starts QEMU, creates a private Unix socket and connects it to port 0 of a modern VirtIO console. After a successful guest–host handshake, the UART prints `host bridge ready` and then the `clsh>` prompt. This command exercises the mock planner. Broker options select local Ollama or the approved host MCP fixture. The host reserves each request against its own session budget and records the outcome in SQLite. [Bridge and boot handshake](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#probe-the-qemu-host-bridge) · [Budget and journal walkthrough](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#run-a-host-backed-mock-plan)
+
+The production Goal Machine design binds the channel to a short-lived authenticated machine lease. The host must enforce aggregate limits independently of guest-supplied identifiers and authorize each external operation. Future approval, artifact and credential services require their own scoped operations. A guest with no NIC can still send data through its permitted services.
 
 For a future AMD64 bootable disk, an illustrative development command is `qemu-system-x86_64 -machine q35 -accel kvm -cpu host -m 128M -smp 1 -nographic -nic none -drive file=clavenar-amd64.img,format=raw`. That image and its boot and device contracts belong to the AMD64 port.
 
@@ -1561,7 +1555,7 @@ Commands are proposed CLI contracts. Distinguish logical agent checkpoints, file
 | V0.5 | AMD64/QEMU/KVM Goal Machine MVP; launch, cancel, artifact review and no-bypass tests |
 | V0.6 | Persistent/scratch block storage, durable artifact publication and recovery |
 | V0.7 | Wider VM integration and optional native networking; no-NIC profile remains available (not a dependency of Goal Machines) |
-| V0.8+ | VM checkpoint experiments, pools, ARM64, Firecracker or direct KVM research, as justified |
+| V0.8+ | VM checkpoint experiments, pools, Firecracker on AMD64 or direct KVM research, as justified |
 | V1.0 | Supported hardened production deployment with independent review, tested isolation, resource control, recovery, documented platform matrix and operational procedures |
 
 These revised virtual milestones supersede earlier suggestions to postpone AMD64 until late expansion. Native release v0.5 and Virtual V0.5 are intended convergence targets, not a requirement to delay RV64 releases if AMD64 slips.
@@ -1574,7 +1568,6 @@ These revised virtual milestones supersede earlier suggestions to postpone AMD64
 |---|---|
 | RV64 | Reference design, QEMU development, research and future embedded hardware |
 | AMD64 | Early second port, commercial Goal Machines on commodity servers, KVM and alternative VMMs |
-| ARM64 | Subsequent cloud/edge target, as demand and engineering capacity justify |
 | WebAssembly | Architecture-independent application format through a restricted runtime, not a CPU port |
 
 Separate architecture-specific boot, interrupt entry, paging, context switching, syscall conventions, CPU-local state, timers and SMP support from common kernel logic. Keep portable capabilities, goals, budgets, IPC semantics, reflex bytecode and filesystem logic in shared code. Define architecture-neutral syscall numbers and fixed-width public types; actual register conventions differ. Hardware abstraction contracts must specify lifetime, alignment, memory ordering, interrupt/preemption and unsafe requirements. Avoid assuming RISC-V's memory ordering or trap behavior applies on another architecture.
@@ -1721,22 +1714,16 @@ Use an opaque model handle and authorized request context, not a provider URL or
 
 ### 34.2 Native networking at v0.7
 
-Implement TCP/IP eventually for standalone operation, not as a prerequisite to the first intelligent agent. Use a user-space network service (`netd`) where practical, with the kernel controlling the device, memory, interrupts, DMA and IPC. If using physical device DMA or direct assignment, account for IOMMU or equivalent isolation requirements.
+The RV64 prototype uses a user-space `netd` backed by smoltcp and a kernel VirtIO-net driver. On the private QEMU link it answers ARP and IPv4 pings, echoes UDP and TCP, and can run one of two client probes. The HTTP probe sends `GET /probe` and parses a bounded response with `httparse`. The TLS probe uses `embedded-tls` to authenticate a TLS 1.3 peer. It checks the trust anchor, DNS subject alternative name and certificate dates, using VirtIO RNG for entropy and the RTC for Unix time. [Ethernet and IP](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#exchange-an-ethernet-frame-over-virtio-net) · [HTTP](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#fetch-an-http-response-over-native-tcp) · [TLS](https://github.com/clavenar/core/blob/9559b5bd2e3ef99712e492d80406e53550a7db8b/docs/qemu-walkthroughs.md#authenticate-a-tls-peer-over-native-tcp)
 
-| Layer | Initial native requirement / candidate |
+| Layer | Remaining standalone scope |
 |---|---|
-| NIC | VirtIO-net on supported virtual platforms; physical Ethernet later |
-| Link/network | Ethernet, ARP, IPv4, ICMP; IPv6/NDP as needed |
-| Transport | TCP and UDP; DNS resolver and optional DHCP |
-| TCP/IP implementation | smoltcp or an evaluated equivalent; do not rewrite TCP merely for novelty |
-| TLS | Secure implementation with validated certificate chains/hostnames, trusted time, entropy, root store and key management |
-| HTTP | HTTP/1.1 client, bounded request/response handling, streaming/SSE where required; HTTP server only if needed |
-| Application | JSON serialization, provider-specific inference adapters, Streamable HTTP MCP |
-| Policy | Broker-only or scoped sockets, destination and traffic restrictions, goal-bound accounting |
+| Device and IP configuration | Support DNS resolution and the address configuration needed by deployed networks. Physical NIC drivers require board-specific support and DMA isolation. |
+| HTTPS | Combine HTTP and verified TLS for an authorized destination. Define trust-root provisioning, redirect handling, timeouts and response bounds. |
+| Services | Carry provider requests and remote MCP Streamable HTTP over the guest network. Keep credentials in trusted user-space services. |
+| Policy and accounting | Bind each connection to goal authority. Recheck resolved addresses and redirects against destination policy, including after DNS rebinding. Enforce traffic limits and account for data sent through approved services. |
 
-Rust library candidates include `virtio-drivers`, `smoltcp`, `httparse`, `rustls`, `serde`, `serde_json` and `heapless`. They are integration candidates, not guaranteed drop-in `no_std` dependencies. TLS providers, secure random generation, certificate management, allocators, I/O and timing support require careful work. Verify TLS and DNS handling, including redirects, hostname validation, rebinding and SSRF defenses, and fail closed on unsupported mandatory policies. Label-based data egress controls require trusted data provenance and explicit declassification; a hostname allowlist alone does not prevent confidential data leakage.
-
-Native agents should ordinarily use `modeld` and `mcpd` rather than receiving raw unrestricted sockets. Conventional applications can request appropriately scoped networking authority where justified. The architecture must support direct networking without allowing a process to bypass its assigned goal policy. [smoltcp project](https://github.com/smoltcp-rs/smoltcp)
+In the standalone design, agents request network operations through `modeld` and `mcpd`. Conventional applications can request scoped network authority. Confidentiality policies also require trusted data provenance and explicit declassification at egress. [smoltcp project](https://github.com/smoltcp-rs/smoltcp)
 
 ## 35. Agent definitions, instruction hierarchy and portable packages
 

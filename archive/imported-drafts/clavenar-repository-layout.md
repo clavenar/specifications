@@ -1,5 +1,7 @@
 # Clavenar — Repository Layout
 
+Historical import. [Maintained repository layout](../../engineering/repository-layout.md)
+
 **Document revision:** 0.1  
 **Date:** 24 November 2026  
 **Organization:** `clavenar`  
@@ -110,15 +112,14 @@ native/
 │       │   │   ├── context.rs
 │       │   │   ├── sv39.rs
 │       │   │   └── timer.rs
-│       │   ├── x86_64/
-│       │   │   ├── boot.rs
-│       │   │   ├── gdt.rs
-│       │   │   ├── idt.rs
-│       │   │   ├── apic.rs
-│       │   │   ├── paging.rs
-│       │   │   ├── context.rs
-│       │   │   └── syscall.rs
-│       │   └── aarch64/      # Later port
+│       │   └── x86_64/
+│       │       ├── boot.rs
+│       │       ├── gdt.rs
+│       │       ├── idt.rs
+│       │       ├── apic.rs
+│       │       ├── paging.rs
+│       │       ├── context.rs
+│       │       └── syscall.rs
 │       ├── memory/
 │       │   ├── frame.rs
 │       │   ├── allocator.rs
@@ -159,8 +160,7 @@ native/
 ├── bootloader/               # Own boot adapters, when needed
 └── linker/
     ├── riscv64.ld
-    ├── x86_64.ld
-    └── aarch64.ld
+    └── x86_64.ld
 ```
 
 ### 3.1 Kernel responsibilities
@@ -491,11 +491,8 @@ platforms/
 ├── qemu-x86_64-microvm/
 ├── kvm-x86_64/
 ├── firecracker-x86_64/
-├── qemu-aarch64-virt/
-├── firecracker-aarch64/
 └── hardware/
-    ├── riscv64/
-    └── aarch64/
+    └── riscv64/
 
 images/
 ├── manifests/
@@ -660,7 +657,6 @@ just benchmark
 | `rust.yml` | Formatting, Clippy, host unit tests and core dependency checks |
 | `riscv64.yml` | Cross-compile RV64, boot QEMU and run kernel/userland tests |
 | `x86_64.yml` | AMD64 cross-build, boot and guest conformance |
-| `aarch64.yml` | Later ARM64 validation |
 | `hosted.yml` | Linux integration and sandbox tests |
 | `virtual.yml` | QEMU, host bridge, KVM and VM teardown tests |
 | `security.yml` | Adversarial and cross-backend policy conformance |
@@ -731,7 +727,7 @@ core/
 | v0.5 Reflex | Bounded reflex prototype and replay; target AMD64 guest conformance | QEMU/KVM Goal Machine MVP, cancellation, mediated egress and artifact export |
 | v0.6 Persistence | Durable storage, recovery and checkpoints | Durable artifacts, accounting and pending external-operation reconciliation |
 | v0.7 Standalone | Native network service, IP/TCP, HTTPS, remote MCP and inference | Expanded VM conformance; retain no-NIC mode |
-| v0.8+ Expansion | Stronger information-flow assurance, ARM64 and portable Wasm | Optional Firecracker/direct-KVM VMM, pools and distributed management as justified |
+| v0.8+ Expansion | Stronger information-flow assurance and portable Wasm | Optional Firecracker/direct-KVM VMM, pools and distributed management as justified |
 | v1.0 Production | Evidence-based security, stability, compatibility and operational readiness | Independent Hosted and Virtual production release gates |
 
 The detailed architecture and release criteria in the master architecture document remain authoritative for existing milestones. The GCEA module boundaries and contract-specific deliverables in this layout reflect the subsequent design discussion; incorporate them into the master roadmap before treating them as committed release gates. Do not require every optional backend to ship in the same release.
@@ -745,7 +741,7 @@ The detailed architecture and release criteria in the master architecture docume
 5. Use explicit effect restrictions, goal contracts, independent verification and staged publication where supported.
 6. No backend silently weakens mandatory security requirements. Record unsupported capabilities and fail closed.
 7. Virtual always executes the actual native kernel; Hosted does not substitute for native milestones.
-8. Build the minimal RV64 foundation first. Bring AMD64 forward for hardware-accelerated Goal Machines; ARM64 and a custom VMM are later, conditional work.
+8. Build the minimal RV64 foundation first. Target AMD64 for hardware-accelerated Goal Machines. Evaluate a custom VMM after measuring the QEMU/KVM deployment.
 9. Maintain one authoritative source for each schema, specification and implementation; keep versions pinned across repositories.
 10. Prefer small, reproducible deliverables and security tests to premature crate proliferation or a large set of empty repositories.
 
