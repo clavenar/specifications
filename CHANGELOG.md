@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Architecture draft 0.20 records the Linux-routed MCP call and DNS, CA
+  and transmit-budget denials on kernel 0.1.5. [Core at `cab3ff8`](https://github.com/clavenar/core/tree/cab3ff890f457dc91f0945c536c25dbae1055a35)
+- Repository layout 0.10 links the TAP walkthrough and the reuse of the
+  existing MCP fixture as the HTTPS service.
 - Architecture draft 0.19 records the kernel-enforced HTTPS transmit
   budget, QEMU frame accounting and cleanup after exhaustion on kernel
   0.1.4 and `clv-abi` 0.0.21. [Core at `beef264`](https://github.com/clavenar/core/tree/beef26455e08273389673deec71e6ff2f3e50082)
