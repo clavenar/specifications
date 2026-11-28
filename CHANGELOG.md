@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.27 records explicit display of queued and saved
+  guest-only replies on kernel 0.1.12 and `clv-abi` 0.0.25. [Core at `717b50f`](https://github.com/clavenar/core/tree/717b50f2daa670bc5c9b7c457df7e55ebad628cf)
+- Repository layout 0.17 locates the receive checks and retained policy.
 - Architecture draft 0.26 records writable guest-only RamFS inputs and
   publication denial on kernel 0.1.11 and `clv-abi` 0.0.24. [Core at `9184b2b`](https://github.com/clavenar/core/tree/9184b2bc671f9e0dda59b4c958a86ee80676ce6a)
 - Repository layout 0.16 locates file policy, the shell-only open mode,
