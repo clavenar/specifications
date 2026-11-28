@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.38 records the protected-file publication regression on
+  kernel 0.1.23 and `clv-abi` 0.0.29. [Core at `f84cf5a`](https://github.com/clavenar/core/tree/f84cf5a5965bc6f5c79fff805c1b5b46635bd085)
+- Repository layout 0.28 describes the expanded rename checks.
 - Architecture draft 0.37 records the guest-only host checkpoint denial regression on
   kernel 0.1.22 and `clv-abi` 0.0.29. [Core at `2445cee`](https://github.com/clavenar/core/tree/2445ceea8366d76c0b8b363809459a395f820c46)
 - Repository layout 0.27 locates the host checkpoint checks.
