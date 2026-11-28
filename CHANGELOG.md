@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Architecture draft 0.25 records shell-only UART input and stdin pipe
+  verification on kernel 0.1.10. [Core at `253502e`](https://github.com/clavenar/core/tree/253502ea899faad15c23ecc4e85f1f538cc1d470)
+- Repository layout 0.15 locates the scheduler identity and syscall guard
+  for raw UART input.
 - Architecture draft 0.24 records guest-only rename restrictions and staging
   audit entries that omit the requested name on kernel 0.1.9 and `clv-abi`
   0.0.23. [Core at `abd4b08`](https://github.com/clavenar/core/tree/abd4b0851bff361d61b84d2ca3847003e1478b0d)
