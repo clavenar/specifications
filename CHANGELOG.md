@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Architecture draft 0.22 records the protected RamFS input, local MCP
+  search and external dispatch denials on kernel 0.1.7 and `clv-abi` 0.0.22. [Core at `a6200b0`](https://github.com/clavenar/core/tree/a6200b01dda4ce72f624ba06327d8045dd4bb52b)
+- Repository layout 0.12 locates the boot file metadata and the grant
+  and read checks.
 - Architecture draft 0.21 records guest-only goal egress and local
   checkpoint recovery on kernel 0.1.6 and `clv-abi` 0.0.22. [Core at `156abc2`](https://github.com/clavenar/core/tree/156abc2cd40d504a0b896dfa4973df6824b14c08)
 - Repository layout 0.11 locates the native HTTPS and host-broker
