@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.30 records silent guest-only file entry on
+  kernel 0.1.15 and `clv-abi` 0.0.27. [Core at `c436f1a`](https://github.com/clavenar/core/tree/c436f1a757fab3480e55ef26bf9d24676c6742ce)
+- Repository layout 0.20 locates echo control and the shared write parser.
 - Architecture draft 0.29 records protected completion details on
   kernel 0.1.14 and `clv-abi` 0.0.27. [Core at `f1b3540`](https://github.com/clavenar/core/tree/f1b3540fb042c8ef19598c0470f2e06eead0f803)
 - Repository layout 0.19 locates the wait flag and status redaction.
