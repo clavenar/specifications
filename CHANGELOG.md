@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.36 records the guest-only checkpoint recovery regression on
+  kernel 0.1.21 and `clv-abi` 0.0.29. [Core at `8eb016b`](https://github.com/clavenar/core/tree/8eb016ba9884d54ae290287bd68763f708012e2e)
+- Repository layout 0.26 locates the checkpoint recovery checks.
 - Architecture draft 0.35 records the guest-only host-plan QEMU regression on
   kernel 0.1.20 and `clv-abi` 0.0.29. [Core at `9c3bc5e`](https://github.com/clavenar/core/tree/9c3bc5ef8129901c0e336bfeb949fda134ee9c77)
 - Repository layout 0.25 locates the guest-only suite and mock broker checks.
