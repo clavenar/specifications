@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.35 records the guest-only host-plan QEMU regression on
+  kernel 0.1.20 and `clv-abi` 0.0.29. [Core at `9c3bc5e`](https://github.com/clavenar/core/tree/9c3bc5ef8129901c0e336bfeb949fda134ee9c77)
+- Repository layout 0.25 locates the guest-only suite and mock broker checks.
 - Architecture draft 0.34 records the writable-journal rename regression on
   kernel 0.1.19 and `clv-abi` 0.0.29. [Core at `7e72073`](https://github.com/clavenar/core/tree/7e72073bd2e1b16ae092f42cad9a86f99d3466dc)
 - Repository layout 0.24 locates the shell and rename regression suite.
