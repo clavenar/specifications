@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Architecture draft 0.26 records writable guest-only RamFS inputs and
+  publication denial on kernel 0.1.11 and `clv-abi` 0.0.24. [Core at `9184b2b`](https://github.com/clavenar/core/tree/9184b2bc671f9e0dda59b4c958a86ee80676ce6a)
+- Repository layout 0.16 locates file policy, the shell-only open mode,
+  and the grant and read checks.
 - Architecture draft 0.25 records shell-only UART input and stdin pipe
   verification on kernel 0.1.10. [Core at `253502e`](https://github.com/clavenar/core/tree/253502ea899faad15c23ecc4e85f1f538cc1d470)
 - Repository layout 0.15 locates the scheduler identity and syscall guard
