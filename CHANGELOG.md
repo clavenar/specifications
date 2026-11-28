@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.28 records guest-only tool stream admission and
+  stdout checks on kernel 0.1.13 and `clv-abi` 0.0.26. [Core at `95e1eb5`](https://github.com/clavenar/core/tree/95e1eb572dc1ee20a7a6f957e7bf3849fd0067ca)
+- Repository layout 0.18 locates the admission, pipe read and audit checks.
 - Architecture draft 0.27 records explicit display of queued and saved
   guest-only replies on kernel 0.1.12 and `clv-abi` 0.0.25. [Core at `717b50f`](https://github.com/clavenar/core/tree/717b50f2daa670bc5c9b7c457df7e55ebad628cf)
 - Repository layout 0.17 locates the receive checks and retained policy.
