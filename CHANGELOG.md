@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.32 records the guest-only egress denial audit on
+  kernel 0.1.17 and `clv-abi` 0.0.29. [Core at `528f58c`](https://github.com/clavenar/core/tree/528f58cbd9f3ceea69916ddb6b8cf1f19f294734)
+- Repository layout 0.22 locates the egress audit checks, history and ABI.
 - Architecture draft 0.31 records explicit protected RamFS reads on
   kernel 0.1.16 and `clv-abi` 0.0.28. [Core at `e0c8781`](https://github.com/clavenar/core/tree/e0c87814e2133660f149a01c81f7b6dd11e2cd0e)
 - Repository layout 0.21 locates the read flag and file policy checks.
