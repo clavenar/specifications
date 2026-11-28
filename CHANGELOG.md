@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Architecture draft 0.23 records serial write denial, restricted exit
+  and fault logs and trusted shell replies for guest-only goals on
+  kernel 0.1.8. [Core at `53813fc`](https://github.com/clavenar/core/tree/53813fcdce6b0a4daacb88f6acbad1170cb677bf)
+- Repository layout 0.13 locates the serial write, goal membership and
+  trap diagnostic checks.
 - Architecture draft 0.22 records the protected RamFS input, local MCP
   search and external dispatch denials on kernel 0.1.7 and `clv-abi` 0.0.22. [Core at `a6200b0`](https://github.com/clavenar/core/tree/a6200b01dda4ce72f624ba06327d8045dd4bb52b)
 - Repository layout 0.12 locates the boot file metadata and the grant
