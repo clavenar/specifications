@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Architecture draft 0.19 records the kernel-enforced HTTPS transmit
+  budget, QEMU frame accounting and cleanup after exhaustion on kernel
+  0.1.4 and `clv-abi` 0.0.21. [Core at `beef264`](https://github.com/clavenar/core/tree/beef26455e08273389673deec71e6ff2f3e50082)
+- Repository layout 0.9 locates the goal and syscall code that enforces
+  the native HTTPS transmit budget.
 - Architecture draft 0.18 records per-goal HTTPS peer selection on kernel
   0.1.3 and `clv-abi` 0.0.20, including QEMU checks for independent DNS pins
   and trust anchors. [Core at `d2e6ce5`](https://github.com/clavenar/core/tree/d2e6ce5e9e042ca4d8482f75d5a91fee5a6b179e)
