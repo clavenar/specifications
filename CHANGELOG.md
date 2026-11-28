@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.34 records the writable-journal rename regression on
+  kernel 0.1.19 and `clv-abi` 0.0.29. [Core at `7e72073`](https://github.com/clavenar/core/tree/7e72073bd2e1b16ae092f42cad9a86f99d3466dc)
+- Repository layout 0.24 locates the shell and rename regression suite.
 - Architecture draft 0.33 records the guest-only QEMU shell regression on
   kernel 0.1.18 and `clv-abi` 0.0.29. [Core at `28c17c9`](https://github.com/clavenar/core/tree/28c17c98c8f61fb8e79cc62df7afae46bae4c9d5)
 - Repository layout 0.23 locates the shell regression and its instructions.
