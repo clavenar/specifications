@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Architecture draft 0.18 records per-goal HTTPS peer selection on kernel
+  0.1.3 and `clv-abi` 0.0.20, including QEMU checks for independent DNS pins
+  and trust anchors. [Core at `d2e6ce5`](https://github.com/clavenar/core/tree/d2e6ce5e9e042ca4d8482f75d5a91fee5a6b179e)
+- Repository layout 0.8 locates the compiled HTTPS peer table and the
+  walkthrough for selecting between its peers.
 - Architecture draft 0.17 records the static IPv4 and HTTPS profile and
   the routed MCP walkthrough on kernel 0.1.2. [Core at `71559ef`](https://github.com/clavenar/core/tree/71559efde4b37721543d4a6fd1942eeaa1b26c48)
 - Repository layout 0.7 locates the network profile builder and the default
