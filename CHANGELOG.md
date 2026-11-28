@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.31 records explicit protected RamFS reads on
+  kernel 0.1.16 and `clv-abi` 0.0.28. [Core at `e0c8781`](https://github.com/clavenar/core/tree/e0c87814e2133660f149a01c81f7b6dd11e2cd0e)
+- Repository layout 0.21 locates the read flag and file policy checks.
 - Architecture draft 0.30 records silent guest-only file entry on
   kernel 0.1.15 and `clv-abi` 0.0.27. [Core at `c436f1a`](https://github.com/clavenar/core/tree/c436f1a757fab3480e55ef26bf9d24676c6742ce)
 - Repository layout 0.20 locates echo control and the shared write parser.
