@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Architecture draft 0.33 records the guest-only QEMU shell regression on
+  kernel 0.1.18 and `clv-abi` 0.0.29. [Core at `28c17c9`](https://github.com/clavenar/core/tree/28c17c98c8f61fb8e79cc62df7afae46bae4c9d5)
+- Repository layout 0.23 locates the shell regression and its instructions.
 - Architecture draft 0.32 records the guest-only egress denial audit on
   kernel 0.1.17 and `clv-abi` 0.0.29. [Core at `528f58c`](https://github.com/clavenar/core/tree/528f58cbd9f3ceea69916ddb6b8cf1f19f294734)
 - Repository layout 0.22 locates the egress audit checks, history and ABI.
